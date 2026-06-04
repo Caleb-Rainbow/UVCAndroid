@@ -178,6 +178,7 @@ public class VideoCapture {
     private WeakReference<ICameraRendererHolder> mRendererHolderWeak;
     private VideoCaptureConfig mConfig;
     private Size mResolution;
+    private volatile long mRecordingStartTimeNs = 0;
 
     private Handler mMainHandler;
 
@@ -420,6 +421,7 @@ public class VideoCapture {
         mEndOfVideoStreamSignal.set(false);
         mEndOfAudioStreamSignal.set(false);
         mEndOfAudioVideoSignal.set(false);
+        mRecordingStartTimeNs = System.nanoTime();
         mIsRecording = true;
 
         postListener.onStart();
@@ -657,7 +659,7 @@ public class VideoCapture {
             if (mVideoBufferInfo.size > 0) {
                 outputBuffer.position(mVideoBufferInfo.offset);
                 outputBuffer.limit(mVideoBufferInfo.offset + mVideoBufferInfo.size);
-                mVideoBufferInfo.presentationTimeUs = (System.nanoTime() / 1000);
+                mVideoBufferInfo.presentationTimeUs = (System.nanoTime() - mRecordingStartTimeNs) / 1000;
 
                 synchronized (mMuxerLock) {
 
@@ -879,7 +881,7 @@ public class VideoCapture {
                                     index,
                                     0,
                                     length,
-                                    (System.nanoTime() / 1000),
+                                    (System.nanoTime() - mRecordingStartTimeNs) / 1000,
                                     mIsRecording ? 0 : MediaCodec.BUFFER_FLAG_END_OF_STREAM);
                         }
                     }

@@ -5,11 +5,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
@@ -41,39 +41,43 @@ fun CameraControlsDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        Column(
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState()),
+                .padding(horizontal = 16.dp),
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (control == null) {
-                Text(
-                    text = stringResource(R.string.camera_controls_text_not_connected),
-                    modifier = Modifier.padding(32.dp),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-            } else {
-                CameraControlsContent(control = control)
-            }
-
-            // Bottom buttons
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 16.dp),
-                horizontalArrangement = Arrangement.End,
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
             ) {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.camera_controls_button_close))
+                if (control == null) {
+                    Text(
+                        text = stringResource(R.string.camera_controls_text_not_connected),
+                        modifier = Modifier.padding(32.dp),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                } else {
+                    CameraControlsContent(control = control)
                 }
-                Spacer(modifier = Modifier.width(8.dp))
-                TextButton(onClick = {
-                    control?.let { resetAllControls(it) }
-                }) {
-                    Text(stringResource(R.string.camera_controls_button_reset))
+
+                // Bottom buttons
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.camera_controls_button_close))
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    TextButton(onClick = {
+                        control?.let { resetAllControls(it) }
+                    }) {
+                        Text(stringResource(R.string.camera_controls_button_reset))
+                    }
                 }
             }
         }

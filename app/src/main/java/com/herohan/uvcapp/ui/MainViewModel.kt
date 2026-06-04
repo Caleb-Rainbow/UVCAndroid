@@ -76,7 +76,7 @@ class MainViewModel : ViewModel() {
             override fun onDeviceOpen(device: UsbDevice, isFirstOpen: Boolean) {
                 _cameraHelper?.openCamera()
                 _cameraHelper?.setButtonCallback { button, state ->
-                    _uiState.update { it.copy(toastMessage = "Button: $button, State: $state") }
+                    _uiState.update { it.copy(toastMessage = "按钮: $button, 状态: $state") }
                 }
             }
 
@@ -133,7 +133,7 @@ class MainViewModel : ViewModel() {
     fun selectDevice(device: UsbDevice) {
         if (!_uiState.value.hasCameraPermission) {
             _uiState.update { it.copy(
-                toastMessage = "Camera permission required for USB camera",
+                toastMessage = "使用 USB 摄像头需要相机权限",
                 selectedDevice = device
             ) }
             return
@@ -206,7 +206,7 @@ class MainViewModel : ViewModel() {
             _cameraHelper?.takePicture(options, object : IImageCapture.OnImageCaptureCallback {
                 override fun onImageSaved(outputFileResults: IImageCapture.OutputFileResults) {
                     _uiState.update {
-                        it.copy(toastMessage = "Saved: ${outputFileResults.savedUri?.path ?: file.absolutePath}")
+                        it.copy(toastMessage = "已保存: ${outputFileResults.savedUri?.path ?: file.absolutePath}")
                     }
                 }
 
@@ -217,9 +217,9 @@ class MainViewModel : ViewModel() {
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
-            _uiState.update { it.copy(toastMessage = "Save failed: ${e.message}") }
+            _uiState.update { it.copy(toastMessage = "保存失败: ${e.message}") }
         } catch (e: SecurityException) {
-            _uiState.update { it.copy(toastMessage = "Permission denied") }
+            _uiState.update { it.copy(toastMessage = "权限被拒绝") }
         }
     }
 
@@ -237,10 +237,10 @@ class MainViewModel : ViewModel() {
             throw e
         } catch (e: IOException) {
             stopRecordInternal()
-            _uiState.update { it.copy(toastMessage = "Record failed: ${e.message}") }
+            _uiState.update { it.copy(toastMessage = "录像失败: ${e.message}") }
         } catch (e: SecurityException) {
             stopRecordInternal()
-            _uiState.update { it.copy(toastMessage = "Permission denied") }
+            _uiState.update { it.copy(toastMessage = "权限被拒绝") }
         }
     }
 
@@ -262,7 +262,7 @@ class MainViewModel : ViewModel() {
             override fun onVideoSaved(outputFileResults: VideoCapture.OutputFileResults) {
                 _uiState.update { it.copy(isRecording = false, recordTimeMillis = 0) }
                 _uiState.update {
-                    it.copy(toastMessage = "Saved: ${outputFileResults.savedUri?.path ?: file.absolutePath}")
+                    it.copy(toastMessage = "已保存: ${outputFileResults.savedUri?.path ?: file.absolutePath}")
                 }
             }
 

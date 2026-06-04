@@ -19,6 +19,7 @@ import com.serenegiant.usb.Format;
 import com.serenegiant.usb.IButtonCallback;
 import com.serenegiant.usb.IFrameCallback;
 import com.serenegiant.usb.Size;
+import com.serenegiant.usb.UVCCamera;
 import com.serenegiant.usb.UVCControl;
 import com.serenegiant.usb.UVCParam;
 import com.serenegiant.utils.UVCUtils;
@@ -246,12 +247,12 @@ public class CameraHelper implements ICameraHelper {
 
     @Override
     public void openCamera() {
-        openCamera(new UVCParam());
+        openCamera(new UVCParam(null, UVCCamera.getRecommendedPlatformQuirks()));
     }
 
     @Override
     public void openCamera(Size size) {
-        openCamera(new UVCParam(size, 0));
+        openCamera(new UVCParam(size, UVCCamera.getRecommendedPlatformQuirks()));
     }
 
     @Override
