@@ -55,4 +55,6 @@
     <string name="action_record">录像</string>
     <string name="action_take_picture">拍照</string>
     <string name="action_more">更多</string>
+    <string name="action_landscape">横屏</string>
+    <string name="action_portrait">竖屏</string>
 </resources>

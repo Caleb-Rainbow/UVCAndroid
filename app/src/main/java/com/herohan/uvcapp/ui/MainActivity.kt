@@ -1,6 +1,7 @@
 package com.herohan.uvcapp.ui
 
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.Manifest
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
@@ -22,6 +23,8 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.StayCurrentLandscape
+import androidx.compose.material.icons.filled.StayCurrentPortrait
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,9 +38,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -89,6 +93,17 @@ private fun MainScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    var isLandscape by rememberSaveable { mutableStateOf(false) }
+
+    val toggleLandscape: () -> Unit = {
+        val activity = context as ComponentActivity
+        isLandscape = !isLandscape
+        activity.requestedOrientation = if (isLandscape) {
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
+    }
 
     // Request CAMERA permission on Android 16+ (required for USB video class devices)
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
@@ -129,6 +144,7 @@ private fun MainScreen(
         topBar = {
             MainTopAppBar(
                 isCameraConnected = uiState.isCameraConnected,
+                isLandscape = isLandscape,
                 onControlsClick = { viewModel.showCameraControlsDialog() },
                 onDeviceClick = { viewModel.showDeviceListDialog() },
                 onSafelyEjectClick = { viewModel.safelyEject() },
@@ -137,6 +153,7 @@ private fun MainScreen(
                 onRotateCCWClick = { viewModel.rotateBy(-90) },
                 onFlipHorizontalClick = { viewModel.flipHorizontally() },
                 onFlipVerticalClick = { viewModel.flipVertically() },
+                onLandscapeClick = toggleLandscape,
             )
         },
     ) { paddingValues ->
@@ -253,6 +270,7 @@ private fun MainScreen(
 @Composable
 private fun MainTopAppBar(
     isCameraConnected: Boolean,
+    isLandscape: Boolean,
     onControlsClick: () -> Unit,
     onDeviceClick: () -> Unit,
     onSafelyEjectClick: () -> Unit,
@@ -261,6 +279,7 @@ private fun MainTopAppBar(
     onRotateCCWClick: () -> Unit,
     onFlipHorizontalClick: () -> Unit,
     onFlipVerticalClick: () -> Unit,
+    onLandscapeClick: () -> Unit,
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -279,6 +298,16 @@ private fun MainTopAppBar(
                         contentDescription = stringResource(R.string.action_control),
                     )
                 }
+                IconButton(onClick = onLandscapeClick) {
+                    Icon(
+                        imageVector = if (isLandscape) Icons.Default.StayCurrentPortrait
+                        else Icons.Default.StayCurrentLandscape,
+                        contentDescription = stringResource(
+                            if (isLandscape) R.string.action_portrait
+                            else R.string.action_landscape
+                        ),
+                    )
+                }
             }
 
             IconButton(onClick = onDeviceClick) {
@@ -289,40 +318,42 @@ private fun MainTopAppBar(
             }
 
             if (isCameraConnected) {
-                IconButton(onClick = { showMenu = !showMenu }) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = stringResource(R.string.action_more),
-                    )
-                }
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false },
-                ) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_safely_eject)) },
-                        onClick = { showMenu = false; onSafelyEjectClick() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_video_format)) },
-                        onClick = { showMenu = false; onVideoFormatClick() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_rotate_90_CW)) },
-                        onClick = { showMenu = false; onRotateCWClick() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_rotate_90_CCW)) },
-                        onClick = { showMenu = false; onRotateCCWClick() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_flip_horizontally)) },
-                        onClick = { showMenu = false; onFlipHorizontalClick() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_flip_vertically)) },
-                        onClick = { showMenu = false; onFlipVerticalClick() },
-                    )
+                Box {
+                    IconButton(onClick = { showMenu = !showMenu }) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = stringResource(R.string.action_more),
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_safely_eject)) },
+                            onClick = { showMenu = false; onSafelyEjectClick() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_video_format)) },
+                            onClick = { showMenu = false; onVideoFormatClick() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_rotate_90_CW)) },
+                            onClick = { showMenu = false; onRotateCWClick() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_rotate_90_CCW)) },
+                            onClick = { showMenu = false; onRotateCCWClick() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_flip_horizontally)) },
+                            onClick = { showMenu = false; onFlipHorizontalClick() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_flip_vertically)) },
+                            onClick = { showMenu = false; onFlipVerticalClick() },
+                        )
+                    }
                 }
             }
         },

@@ -1,5 +1,6 @@
 package com.herohan.uvcdemo
 
+import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -14,6 +15,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.StayCurrentLandscape
+import androidx.compose.material.icons.filled.StayCurrentPortrait
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -30,6 +33,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,6 +72,17 @@ private fun CustomPreviewScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    var isLandscape by rememberSaveable { mutableStateOf(false) }
+
+    val toggleLandscape: () -> Unit = {
+        val activity = context as ComponentActivity
+        isLandscape = !isLandscape
+        activity.requestedOrientation = if (isLandscape) {
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
+    }
 
     // Toast handling
     LaunchedEffect(uiState.toastMessage) {
@@ -81,6 +96,7 @@ private fun CustomPreviewScreen(
         topBar = {
             CustomPreviewTopAppBar(
                 isCameraConnected = uiState.isCameraConnected,
+                isLandscape = isLandscape,
                 onControlsClick = { viewModel.showCameraControlsDialog() },
                 onDeviceClick = { viewModel.showDeviceListDialog() },
                 onVideoFormatClick = { viewModel.showVideoFormatDialog() },
@@ -88,6 +104,7 @@ private fun CustomPreviewScreen(
                 onRotateCCWClick = { viewModel.rotateBy(-90) },
                 onFlipHorizontalClick = { viewModel.flipHorizontally() },
                 onFlipVerticalClick = { viewModel.flipVertically() },
+                onLandscapeClick = toggleLandscape,
             )
         },
     ) { paddingValues ->
@@ -168,6 +185,7 @@ private fun CustomPreviewScreen(
 @Composable
 private fun CustomPreviewTopAppBar(
     isCameraConnected: Boolean,
+    isLandscape: Boolean,
     onControlsClick: () -> Unit,
     onDeviceClick: () -> Unit,
     onVideoFormatClick: () -> Unit,
@@ -175,6 +193,7 @@ private fun CustomPreviewTopAppBar(
     onRotateCCWClick: () -> Unit,
     onFlipHorizontalClick: () -> Unit,
     onFlipVerticalClick: () -> Unit,
+    onLandscapeClick: () -> Unit,
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -194,40 +213,55 @@ private fun CustomPreviewTopAppBar(
             }
 
             if (isCameraConnected) {
-                IconButton(onClick = { showMenu = !showMenu }) {
+                IconButton(onClick = onLandscapeClick) {
                     Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = stringResource(R.string.action_control),
+                        imageVector = if (isLandscape) Icons.Default.StayCurrentPortrait
+                        else Icons.Default.StayCurrentLandscape,
+                        contentDescription = stringResource(
+                            if (isLandscape) R.string.action_portrait
+                            else R.string.action_landscape
+                        ),
                     )
                 }
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false },
-                ) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_control)) },
-                        onClick = { showMenu = false; onControlsClick() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_video_format)) },
-                        onClick = { showMenu = false; onVideoFormatClick() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_rotate_90_CW)) },
-                        onClick = { showMenu = false; onRotateCWClick() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_rotate_90_CCW)) },
-                        onClick = { showMenu = false; onRotateCCWClick() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_flip_horizontally)) },
-                        onClick = { showMenu = false; onFlipHorizontalClick() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.action_flip_vertically)) },
-                        onClick = { showMenu = false; onFlipVerticalClick() },
-                    )
+            }
+
+            if (isCameraConnected) {
+                Box {
+                    IconButton(onClick = { showMenu = !showMenu }) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = stringResource(R.string.action_control),
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_control)) },
+                            onClick = { showMenu = false; onControlsClick() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_video_format)) },
+                            onClick = { showMenu = false; onVideoFormatClick() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_rotate_90_CW)) },
+                            onClick = { showMenu = false; onRotateCWClick() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_rotate_90_CCW)) },
+                            onClick = { showMenu = false; onRotateCCWClick() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_flip_horizontally)) },
+                            onClick = { showMenu = false; onFlipHorizontalClick() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.action_flip_vertically)) },
+                            onClick = { showMenu = false; onFlipVerticalClick() },
+                        )
+                    }
                 }
             }
         },

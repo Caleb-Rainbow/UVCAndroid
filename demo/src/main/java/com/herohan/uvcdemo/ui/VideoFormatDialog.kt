@@ -170,7 +170,7 @@ private fun FormatDropdown(
             readOnly = true,
             label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().menuAnchor(),
         )
         ExposedDropdownMenu(
             expanded = expanded,

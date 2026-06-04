@@ -79,4 +79,6 @@
     <string name="frame_callback_fps">FPS: %.1f</string>
     <string name="camera_controls_text_power_line_freq">Power Line Freq</string>
     <string name="camera_controls_text_not_connected">Camera not connected</string>
+    <string name="action_landscape">Landscape</string>
+    <string name="action_portrait">Portrait</string>
 </resources>

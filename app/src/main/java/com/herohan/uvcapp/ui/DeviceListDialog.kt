@@ -68,7 +68,7 @@ fun DeviceListDialog(
                     selectedDevice?.let { onDeviceSelected(it) }
                     onDismiss()
                 },
-                enabled = selectedDevice != null && selectedDevice != currentDevice,
+                enabled = selectedDevice != null,
             ) {
                 Text(stringResource(android.R.string.ok))
             }

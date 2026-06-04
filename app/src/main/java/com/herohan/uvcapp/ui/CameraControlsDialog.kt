@@ -19,6 +19,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -365,6 +366,8 @@ private fun UvcRadioGroup(
     selectedIndex: Int,
     onSelected: (Int) -> Unit,
 ) {
+    var currentSelected by remember(selectedIndex) { mutableIntStateOf(selectedIndex) }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -382,8 +385,13 @@ private fun UvcRadioGroup(
             options.forEachIndexed { index, option ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(
-                        selected = index == selectedIndex,
-                        onClick = { if (isEnabled) onSelected(index) },
+                        selected = index == currentSelected,
+                        onClick = {
+                            if (isEnabled) {
+                                currentSelected = index
+                                onSelected(index)
+                            }
+                        },
                         enabled = isEnabled,
                     )
                     Text(
