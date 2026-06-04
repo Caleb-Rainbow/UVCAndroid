@@ -217,25 +217,30 @@ public final class USBMonitor {
             if (DEBUG) Log.i(TAG, "register:");
             final Context context = mWeakContext.get();
             if (context != null) {
-                int flags = 0;
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    // Starting with Build. VERSION_CODES. UPSIDE_DOWN_CAKE, for apps that target SDK Build. VERSION_CODES. UPSIDE_DOWN_CAKE or higher,
-                    // creation of a PendingIntent with FLAG_MUTABLE and an implicit Intent within will throw an IllegalArgumentException for security reasons.
-                    // To bypass this check, use FLAG_ALLOW_UNSAFE_IMPLICIT_INTENT when creating a PendingIntent
-                    flags = PendingIntent.FLAG_MUTABLE | PendingIntent.FLAG_ALLOW_UNSAFE_IMPLICIT_INTENT;
-                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    // Up until Build.VERSION_CODES.R, PendingIntents are assumed to be mutable by default, unless FLAG_IMMUTABLE is set.
-                    // Starting with Build.VERSION_CODES.S, it will be required to explicitly specify the mutability of PendingIntents on creation with either (@link #FLAG_IMMUTABLE} or FLAG_MUTABLE.
-                    flags = PendingIntent.FLAG_MUTABLE;
+                // Use explicit intent so the broadcast is delivered reliably
+                // on Android 16+ (API 36) where implicit PendingIntents are blocked.
+                final Intent permissionIntent = new Intent(ACTION_USB_PERMISSION);
+                permissionIntent.setPackage(context.getPackageName());
+
+                try {
+                    int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? PendingIntent.FLAG_MUTABLE : 0;
+                    mPermissionIntent = PendingIntent.getBroadcast(context, 0,
+                            permissionIntent, flags);
+                    Log.i(TAG, "register: PendingIntent created (explicit, flags=" + flags + ")");
+                } catch (Exception e1) {
+                    Log.w(TAG, "register: explicit intent failed", e1);
                 }
-                mPermissionIntent = PendingIntent.getBroadcast(context, 0, new Intent(ACTION_USB_PERMISSION), flags);
-                final IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION);
-                // ACTION_USB_DEVICE_ATTACHED never comes on some devices so it should not be added here
-                filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    context.registerReceiver(mUsbReceiver, filter, Context.RECEIVER_EXPORTED);
+                if (mPermissionIntent != null) {
+                    final IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION);
+                    // ACTION_USB_DEVICE_ATTACHED never comes on some devices so it should not be added here
+                    filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        context.registerReceiver(mUsbReceiver, filter, Context.RECEIVER_EXPORTED);
+                    } else {
+                        context.registerReceiver(mUsbReceiver, filter);
+                    }
                 } else {
-                    context.registerReceiver(mUsbReceiver, filter);
+                    Log.e(TAG, "register: mPermissionIntent is null, USB permission will not work");
                 }
             }
             // start connection check
@@ -533,25 +538,53 @@ public final class USBMonitor {
     public void requestPermission(final UsbDevice device) {
         if (DEBUG) Log.v(TAG, "requestPermission:device=" + device.getDeviceName());
         synchronized (USBMonitor.class) {
-            if (isRegistered()) {
+            final boolean registered = isRegistered();
+            final boolean hasPerm = device != null && mUsbManager.hasPermission(device);
+            Log.d(TAG, "requestPermission: registered=" + registered
+                    + " hasPermission=" + hasPerm
+                    + " mPermissionIntent=" + (mPermissionIntent != null ? "non-null" : "null")
+                    + " destroyed=" + mDestroyed);
+            if (registered) {
                 if (device != null) {
-                    if (mUsbManager.hasPermission(device)) {
+                    if (hasPerm) {
                         // call onConnect if app already has permission
                         processOpenDevice(device);
                     } else {
+                        // On Android 16+ (API 34+), UsbManager.requestPermission() may auto-deny.
+                        // Try opening the device directly first - if the app declares USB host feature
+                        // and device filter in manifest, the system may allow implicit access.
+                        Log.d(TAG, "requestPermission: no permission, trying direct open (API " + Build.VERSION.SDK_INT + ")");
                         try {
-                            // if no usb permission, request permission
+                            final UsbDeviceConnection connection = mUsbManager.openDevice(device);
+                            if (connection != null) {
+                                Log.i(TAG, "requestPermission: direct open succeeded! fd=" + connection.getFileDescriptor());
+                                connection.close();
+                                // Permission was implicitly granted, process as open
+                                processOpenDevice(device);
+                                return;
+                            } else {
+                                Log.w(TAG, "requestPermission: direct open returned null");
+                            }
+                        } catch (SecurityException e) {
+                            Log.w(TAG, "requestPermission: direct open SecurityException: " + e.getMessage());
+                        } catch (Exception e) {
+                            Log.w(TAG, "requestPermission: direct open exception", e);
+                        }
+                        // Fallback: request permission through system dialog
+                        try {
                             mUsbManager.requestPermission(device, mPermissionIntent);
+                            Log.d(TAG, "requestPermission: requestPermission() called");
                         } catch (final Exception e) {
-                            // With Android5.1.x of GALAXY, this action may throw exception:android.permission.sec.MDM_APP_MGMT
-                            Log.w(TAG, e);
+                            Log.e(TAG, "requestPermission: requestPermission() threw exception", e);
                             processCancel(device);
                         }
                     }
                 } else {
+                    Log.w(TAG, "requestPermission: device is null");
                     processCancel(device);
                 }
             } else {
+                Log.w(TAG, "requestPermission: not registered, calling processCancel");
                 processCancel(device);
             }
         }
@@ -572,15 +605,15 @@ public final class USBMonitor {
                     synchronized (USBMonitor.this) {
                         final UsbDevice device = getExtraDevice(intent);
                         if (device != null) {
-                            if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
-                                // get permission, call onConnect
-                                processOpenDevice(device);
-                            } else {
-                                // failed to get permission
-                                processCancel(device);
-                            }
-                        }
-                    }
+                           if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+                               // get permission, call onConnect
+                               processOpenDevice(device);
+                           } else {
+                               // failed to get permission
+                               processCancel(device);
+                           }
+                       }
+                   }
                 } else if (UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)) {
                     final UsbDevice device = getExtraDevice(intent);
                     if (device != null) {
@@ -695,12 +728,12 @@ public final class USBMonitor {
         }
     }
 
-    private void processCancel(final UsbDevice device) {
-        if (mDestroyed) return;
-        if (DEBUG) Log.v(TAG, "processCancel:");
-        updateDeviceKeys(device, false);
-        if (mOnDeviceConnectListener != null) {
-            mListenerHandler.post(() -> mOnDeviceConnectListener.onCancel(device));
+     private void processCancel(final UsbDevice device) {
+         if (mDestroyed) return;
+         if (DEBUG) Log.v(TAG, "processCancel:");
+         updateDeviceKeys(device, false);
+         if (mOnDeviceConnectListener != null) {
+             mListenerHandler.post(() -> mOnDeviceConnectListener.onCancel(device));
         }
     }
 

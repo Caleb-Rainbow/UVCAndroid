@@ -47,6 +47,12 @@
     <string name="camera_controls_text_disable">Disable</string>
     <string name="camera_controls_text_50hz">50Hz</string>
     <string name="camera_controls_text_60hz">60Hz</string>
+    <string name="camera_controls_text_power_line_freq">Power Line Freq</string>
+    <string name="camera_controls_text_not_connected">Camera not connected</string>
     <string name="camera_controls_button_close">Close</string>
     <string name="camera_controls_button_reset">Reset</string>
+
+    <string name="action_record">Record</string>
+    <string name="action_take_picture">Take Picture</string>
+    <string name="action_more">More</string>
 </resources>

@@ -57,4 +57,26 @@
 
     <string name="btn_open">Open</string>
     <string name="btn_close">Close</string>
+
+    <!-- Additional strings for Compose screens -->
+    <string name="action_usb">USB</string>
+    <string name="action_more">More</string>
+    <string name="action_safely_eject">Safely Eject</string>
+    <string name="action_record">Record</string>
+    <string name="action_take_picture">Take Picture</string>
+    <string name="action_open_camera">Open Camera</string>
+    <string name="action_close_camera">Close Camera</string>
+    <string name="main_connect_usb_tip">Connect the USB camera</string>
+    <string name="multi_camera_left_empty">Left: No camera</string>
+    <string name="multi_camera_right_empty">Right: No camera</string>
+    <string name="multi_camera_open_left">Open Left</string>
+    <string name="multi_camera_close_left">Close Left</string>
+    <string name="multi_camera_open_right">Open Right</string>
+    <string name="multi_camera_close_right">Close Right</string>
+    <string name="frame_callback_info">Frame Info</string>
+    <string name="frame_callback_format">Format: NV21</string>
+    <string name="frame_callback_count">Frames: %d</string>
+    <string name="frame_callback_fps">FPS: %.1f</string>
+    <string name="camera_controls_text_power_line_freq">Power Line Freq</string>
+    <string name="camera_controls_text_not_connected">Camera not connected</string>
 </resources>

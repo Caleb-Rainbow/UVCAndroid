@@ -219,14 +219,25 @@ class CameraConnectionService {
                 if (cameraInternal == null) {
                     Log.i(TAG, "wait for getting permission");
                     try {
-                        mConnectionSync.wait();
+                        mConnectionSync.wait(5000);
                     } catch (Exception e) {
                         Log.e(TAG, "selectDevice:", e);
                     }
                     Log.i(TAG, "check CameraInternal again");
                     cameraInternal = mCameras.get(cameraKey);
                     if (cameraInternal == null) {
-                        throw new RuntimeException("failed to open USB device(has no permission)");
+                        // Retry permission request once more before failing
+                        Log.w(TAG, "retrying permission request");
+                        mUSBMonitor.requestPermission(device);
+                        try {
+                            mConnectionSync.wait(5000);
+                        } catch (Exception e) {
+                            Log.e(TAG, "selectDevice retry:", e);
+                        }
+                        cameraInternal = mCameras.get(cameraKey);
+                        if (cameraInternal == null) {
+                            throw new RuntimeException("failed to open USB device(has no permission)");
+                        }
                     }
                 }
             }

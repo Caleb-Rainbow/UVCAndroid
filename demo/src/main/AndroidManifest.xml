@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.herohan.uvcdemo">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-feature android:name="android.hardware.usb.host" android:required="true" />
 
     <application
         android:allowBackup="true"
@@ -9,11 +10,10 @@
         android:requestLegacyExternalStorage="true"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.UVCAndroid">
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity
             android:name=".MultiCameraNewActivity"
-            android:exported="false">
-        </activity>
+            android:exported="false" />
         <activity
             android:name=".SetFrameCallbackActivity"
             android:exported="false" />
@@ -41,9 +41,14 @@
             android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/device_filter" />
         </activity>
     </application>
 

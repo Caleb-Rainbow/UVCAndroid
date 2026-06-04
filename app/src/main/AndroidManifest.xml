@@ -15,11 +15,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Usbvideo">
         <activity
-            android:name="com.herohan.uvcapp.activity.MainActivity"
+            android:name="com.herohan.uvcapp.ui.MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:launchMode="singleTask"
-            android:theme="@style/Theme.Usbvideo.NoActionBar">
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
