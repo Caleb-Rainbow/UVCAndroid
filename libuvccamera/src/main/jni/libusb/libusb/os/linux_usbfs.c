@@ -38,6 +38,12 @@
 #include <sys/vfs.h>
 #include <unistd.h>
 
+/* Android log for USB transfer diagnostics */
+#include <android/log.h>
+#define USBFS_LOG_ERR(...) __android_log_print(ANDROID_LOG_ERROR, "libusb_usbfs", __VA_ARGS__)
+#define USBFS_LOG_WARN(...) __android_log_print(ANDROID_LOG_WARN, "libusb_usbfs", __VA_ARGS__)
+#define USBFS_LOG_INFO(...) __android_log_print(ANDROID_LOG_INFO, "libusb_usbfs", __VA_ARGS__)
+
 /* sysfs vs usbfs:
  * opening a usbfs node causes the device to be resumed, so we attempt to
  * avoid this during enumeration.
@@ -1491,6 +1497,8 @@ static int claim_interface(struct libusb_device_handle *handle, unsigned int ifa
 	int r = ioctl(fd, IOCTL_USBFS_CLAIMINTERFACE, &iface);
 
 	if (r < 0) {
+		USBFS_LOG_ERR("CLAIMINTERFACE failed: errno=%d (%s), iface=%d, fd=%d",
+			errno, strerror(errno), iface, fd);
 		if (errno == ENOENT)
 			return LIBUSB_ERROR_NOT_FOUND;
 		else if (errno == EBUSY)
@@ -1501,6 +1509,7 @@ static int claim_interface(struct libusb_device_handle *handle, unsigned int ifa
 		usbi_err(HANDLE_CTX(handle), "claim interface failed, errno=%d", errno);
 		return LIBUSB_ERROR_OTHER;
 	}
+	USBFS_LOG_INFO("CLAIMINTERFACE ok: iface=%d", iface);
 	return 0;
 }
 
@@ -1532,6 +1541,8 @@ static int op_set_interface(struct libusb_device_handle *handle, uint8_t interfa
 	setintf.altsetting = altsetting;
 	r = ioctl(fd, IOCTL_USBFS_SETINTERFACE, &setintf);
 	if (r < 0) {
+		USBFS_LOG_ERR("SETINTERFACE failed: errno=%d (%s), interface=%d, altsetting=%d, fd=%d",
+			errno, strerror(errno), interface, altsetting, fd);
 		if (errno == EINVAL)
 			return LIBUSB_ERROR_NOT_FOUND;
 		else if (errno == ENODEV)
@@ -1541,6 +1552,7 @@ static int op_set_interface(struct libusb_device_handle *handle, uint8_t interfa
 		return LIBUSB_ERROR_OTHER;
 	}
 
+	USBFS_LOG_INFO("SETINTERFACE ok: interface=%d, altsetting=%d", interface, altsetting);
 	return 0;
 }
 
@@ -2167,6 +2179,14 @@ static int submit_iso_transfer(struct usbi_transfer *itransfer)
 
 		if (r == 0)
 			continue;
+
+		/* Log detailed USBFS SUBMITURB failure for Android diagnostics */
+		USBFS_LOG_ERR("ISO SUBMITURB failed: errno=%d (%s), urb[%d/%d]: "
+			"endpoint=0x%02x, type=%d, flags=0x%x, buffer_length=%d, "
+			"number_of_packets=%d, fd=%d",
+			errno, strerror(errno), i, num_urbs,
+			urbs[i]->endpoint, urbs[i]->type, urbs[i]->flags,
+			urbs[i]->buffer_length, urbs[i]->number_of_packets, hpriv->fd);
 
 		if (errno == ENODEV) {
 			r = LIBUSB_ERROR_NO_DEVICE;

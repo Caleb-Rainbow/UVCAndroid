@@ -260,12 +260,13 @@ typedef struct uvc_device_info {
 #define LIBUVC_NUM_TRANSFER_BUFS 20
 #elif defined(__ANDROID__)
 /*
- * Android USB host stacks (notably MediaTek) often fail isochronous streaming
- * when too many URBs are queued at once: libusb_submit_transfer may return
- * ENOMEM (errno=12). See https://github.com/libuvc/libuvc/issues/299
- * Keep concurrent transfers in the same range as macOS instead of 100.
+ * Android USB host stacks often fail isochronous streaming when too many
+ * URBs are queued at once: libusb_submit_transfer may return ENOMEM (errno=12).
+ * Each ISO URB at 4K resolution uses ~97KB of kernel USB buffer.
+ * With 16 buffers that's ~1.5MB which exceeds many Android kernels' limits.
+ * 4 buffers × ~97KB = ~388KB, which should fit on all devices.
  */
-#define LIBUVC_NUM_TRANSFER_BUFS 16
+#define LIBUVC_NUM_TRANSFER_BUFS 4
 #else
 #define LIBUVC_NUM_TRANSFER_BUFS 100
 #endif
@@ -275,16 +276,21 @@ typedef struct uvc_device_info {
  * Maximum number of isochronous packets in a single transfer.
  *
  * This controls the size of each individual iso transfer. Some Android USB
- * host stacks may fail large iso submissions with ENOMEM, for example:
+ * host stacks fail large iso submissions with ENOMEM (errno=12) because the
+ * kernel cannot allocate a large contiguous buffer for the URB.
  *
- *     libusb: error [submit_iso_transfer] submiturb failed, errno=12
+ * At 4K MJPEG with endpoint_bytes_per_packet=3060:
+ *   32 packets × 3060 = 97920 bytes per URB → ENOMEM on many devices
+ *   8  packets × 3060 = 24480 bytes per URB → safe for all devices
  *
- * On Android, total in-flight URB pressure is now primarily reduced by using
- * a smaller LIBUVC_NUM_TRANSFER_BUFS value. Therefore keep this per-transfer
- * limit at the original default unless a specific platform needs tuning.
+ * With 4 transfer buffers at 24KB each, total in-flight ≈ 98KB.
  */
 #ifndef LIBUVC_PACKETS_PER_TRANSFER_MAX
+#ifdef __ANDROID__
+#define LIBUVC_PACKETS_PER_TRANSFER_MAX 8
+#else
 #define LIBUVC_PACKETS_PER_TRANSFER_MAX 32
+#endif
 #endif
 
 #define LIBUVC_XFER_META_BUF_SIZE ( 4 * 1024 )

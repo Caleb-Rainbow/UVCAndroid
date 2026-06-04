@@ -562,14 +562,31 @@ void UVCPreview::do_preview(uvc_stream_ctrl_t *ctrl) {
     int result = uvc_start_streaming(
             mDeviceHandle, ctrl, uvc_preview_frame_callback, (void *) this, 0);
 
+    if (UNLIKELY(result != 0)) {
+        // USB transfer submission failed (e.g., insufficient memory for high resolution).
+        // Try falling back to 1920x1080 if current resolution is higher.
+        if (requestWidth > 1920 || requestHeight > 1080) {
+            LOGI("do_preview: retrying with fallback resolution 1920x1080 (was %dx%d)",
+                 requestWidth, requestHeight);
+            requestWidth = 1920;
+            requestHeight = 1080;
+            uvc_stream_ctrl_t ctrl2;
+            result = prepare_preview(&ctrl2);
+            if (LIKELY(!result)) {
+                result = uvc_start_streaming(
+                        mDeviceHandle, &ctrl2, uvc_preview_frame_callback, (void *) this, 0);
+            }
+        }
+    }
+
     if (LIKELY(!result)) {
         clearPreviewFrame();
         pthread_create(&capture_thread, NULL, capture_thread_func, (void *) this);
         pthread_setname_np(capture_thread, "capture_thread");
 
-#if LOCAL_DEBUG
-        LOGI("Streaming...");
-#endif
+        LOGI("Streaming... format=%s(%dx%d)",
+             frameFormatType == UVC_VS_FRAME_MJPEG ? "MJPEG" : "YUYV",
+             frameWidth, frameHeight);
         if (frameFormatType == UVC_VS_FRAME_MJPEG) {
             // MJPEG mode
             for (; LIKELY(isRunning());) {

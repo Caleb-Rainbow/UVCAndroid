@@ -727,12 +727,13 @@ public class RendererHolder extends EGLTask implements IRendererHolder {
         /**
          * The callback listener when receiving video data on SurfaceTexture
          */
+
         protected final SurfaceTexture.OnFrameAvailableListener
                 mOnFrameAvailableListener = new SurfaceTexture.OnFrameAvailableListener() {
 
             @Override
             public void onFrameAvailable(final SurfaceTexture surfaceTexture) {
-                removeMessages(REQUEST_DRAW);
+                                removeMessages(REQUEST_DRAW);
                 if (!mIsFirstFrameRendered) {
                     makeCurrent();
                     mIsFirstFrameRendered = true;

@@ -161,7 +161,21 @@ public class UVCCamera {
         }
 
         int r = nativeSetPreviewSize(mNativePtr, size.width, size.height, size.type, size.fps);
+        if (r != 0) {
+            // Retry: some cameras need double probe for correct negotiation after replug.
+            // The UVC probe/commit may fail on first attempt because the camera firmware
+            // hasn't fully initialized, or the bandwidth calculation is incorrect.
+            if (DEBUG) Log.d(TAG, "setPreviewSize failed on first attempt, retrying: err=" + r);
+            r = nativeSetPreviewSize(mNativePtr, size.width, size.height, size.type, size.fps);
+        }
         if (DEBUG) Log.d(TAG, "setPreviewSize:" + r + ":" + size);
+
+        if (r != 0) {
+            Log.e(TAG, "Failed to set preview size after retry: err=" + r + ", size=" + size);
+            // Propagate the error so callers know preview size negotiation failed,
+            // rather than silently proceeding with an invalid streaming configuration.
+            return r;
+        }
 
         mCurrentSize = size;
 
@@ -536,7 +550,8 @@ public class UVCCamera {
      */
     public synchronized void startPreview() {
         if (mCtrlBlock != null) {
-            nativeStartPreview(mNativePtr);
+            final int result = nativeStartPreview(mNativePtr);
+            if (DEBUG) Log.d(TAG, "startPreview:result=" + result);
         }
     }
 

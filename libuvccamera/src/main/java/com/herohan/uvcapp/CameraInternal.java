@@ -1,6 +1,8 @@
 package com.herohan.uvcapp;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.view.Surface;
 
@@ -52,6 +54,12 @@ final class CameraInternal implements ICameraInternal {
     private IImageCapture mImageCapture;
     private VideoCapture mVideoCapture;
 
+    /**
+     * Handler for posting operations that must not run on the EGL thread
+     * (e.g., startPreview triggered by onPrimarySurfaceCreate callback).
+     */
+    private final Handler mAsyncHandler = new Handler(Looper.getMainLooper());
+
     public CameraInternal(final Context context, final UsbControlBlock ctrlBlock, final int vid, final int pid) {
         if (DEBUG) Log.d(TAG, "Constructor:");
         mWeakContext = new WeakReference<Context>(context);
@@ -61,14 +69,17 @@ final class CameraInternal implements ICameraInternal {
             @Override
             public void onPrimarySurfaceCreate(Surface surface) {
                 // After primary surface has been created during previewing, invoking startPreview method again.
+                // Must post asynchronously to avoid deadlock: this callback runs on the EGL thread,
+                // and startPreview -> updateRendererSize -> updatePrimarySize sends messages to the
+                // EGL handler and waits for completion. If we call startPreview directly on the EGL
+                // thread, it would deadlock waiting for its own message to be processed.
                 if (mIsPreviewing) {
-                    startPreview();
+                    mAsyncHandler.post(() -> startPreview());
                 }
             }
 
             @Override
             public void onFrameAvailable() {
-
             }
 
             @Override
@@ -133,7 +144,7 @@ final class CameraInternal implements ICameraInternal {
         } catch (final Exception e) {
             Log.e(TAG, "setPreviewSize:", e);
             // unexpectedly #setPreviewSize failed
-            synchronized (CameraInternal.class) {
+            synchronized (mSync) {
                 if (mUVCCamera != null) {
                     mUVCCamera.destroy();
                     mUVCCamera = null;
@@ -209,7 +220,8 @@ final class CameraInternal implements ICameraInternal {
     private void resetUVCCamera() {
         if (DEBUG) Log.d(TAG, "resetUVCCamera: " + this);
         stopRecording();
-        synchronized (CameraInternal.class) {
+        synchronized (mSync) {
+            mIsPreviewing = false;
             if (mUVCCamera != null) {
                 mUVCCamera.stopPreview();
                 mUVCCamera.destroy(true);
@@ -227,7 +239,7 @@ final class CameraInternal implements ICameraInternal {
         if (DEBUG) Log.d(TAG, "openUVCCamera: " + this);
         try {
             int result = 0;
-            synchronized (CameraInternal.class) {
+            synchronized (mSync) {
                 mUVCCamera = new UVCCamera(param);
                 result = mUVCCamera.open(mCtrlBlock);
             }
@@ -281,7 +293,8 @@ final class CameraInternal implements ICameraInternal {
         if (DEBUG) Log.d(TAG, "closeCamera: " + this);
         stopRecording();
         boolean closed = false;
-        synchronized (CameraInternal.class) {
+        synchronized (mSync) {
+            mIsPreviewing = false;
             if (mUVCCamera != null) {
                 mUVCCamera.stopPreview();
                 mUVCCamera.destroy();
@@ -307,7 +320,7 @@ final class CameraInternal implements ICameraInternal {
     @Override
     public void startPreview() {
         if (DEBUG) Log.d(TAG, "startPreview: " + this);
-        synchronized (CameraInternal.class) {
+        synchronized (mSync) {
             if (mUVCCamera == null) return;
 
 //				mUVCCamera.setFrameCallback(mIFrameCallback, UVCCamera.PIXEL_FORMAT_YUV);
@@ -317,7 +330,10 @@ final class CameraInternal implements ICameraInternal {
                 updateRendererSize(size.width, size.height);
             }
 
-            mUVCCamera.setPreviewDisplay(mRendererHolder.getPrimarySurface());
+            final Surface primarySurface = mRendererHolder.getPrimarySurface();
+            if (DEBUG) Log.d(TAG, "startPreview: surface=" + primarySurface
+                    + ", valid=" + (primarySurface != null && primarySurface.isValid()));
+            mUVCCamera.setPreviewDisplay(primarySurface);
             mUVCCamera.startPreview();
 
             mIsPreviewing = true;
@@ -327,7 +343,7 @@ final class CameraInternal implements ICameraInternal {
     @Override
     public void stopPreview() {
         if (DEBUG) Log.d(TAG, "stopPreview: " + this);
-        synchronized (CameraInternal.class) {
+        synchronized (mSync) {
             if (mUVCCamera != null) {
                 mUVCCamera.stopPreview();
             }
@@ -433,7 +449,7 @@ final class CameraInternal implements ICameraInternal {
 
     private void releaseResource() {
         if (DEBUG) Log.d(TAG, "releaseResource: " + this);
-        synchronized (CameraInternal.class) {
+        synchronized (mSync) {
             clearCallbacks();
 
             if (mRendererHolder != null) {

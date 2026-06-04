@@ -1389,10 +1389,20 @@ uvc_error_t uvc_stream_start(
         }
 
         /* Select the altsetting */
+        /* On some Android USB stacks, the altsetting must be reset to 0 first
+         * before setting the target altsetting. This ensures the USB host
+         * controller properly releases any previous bandwidth allocation. */
+        ret = libusb_set_interface_alt_setting(strmh->devh->usb_devh,
+                                               altsetting->bInterfaceNumber, 0);
+        if (ret != UVC_SUCCESS) {
+            /* Don't fail here - some devices are already at altsetting 0 */
+        }
+
         ret = libusb_set_interface_alt_setting(strmh->devh->usb_devh,
                                                altsetting->bInterfaceNumber,
                                                altsetting->bAlternateSetting);
         if (ret != UVC_SUCCESS) {
+            LOGE("libusb_set_interface_alt_setting failed: ret=%d", ret);
             UVC_DEBUG("libusb_set_interface_alt_setting failed");
             goto fail;
         }
@@ -1441,18 +1451,38 @@ uvc_error_t uvc_stream_start(
          transfer_id++) {
         ret = libusb_submit_transfer(strmh->transfers[transfer_id]);
         if (ret != UVC_SUCCESS) {
-            UVC_DEBUG("libusb_submit_transfer failed: %d", ret);
+            LOGE("libusb_submit_transfer #%d failed: ret=%d", transfer_id, ret);
             break;
         }
     }
 
     if (ret != UVC_SUCCESS && transfer_id >= 0) {
+        int submitted_count = transfer_id;
+        LOGE("uvc_stream_start: transfer submission FAILED at #%d, submitted %d/%d",
+             transfer_id, submitted_count, LIBUVC_NUM_TRANSFER_BUFS);
+
+        /* Free the unsubmitted transfers (transfer_id..N) */
         for (; transfer_id < LIBUVC_NUM_TRANSFER_BUFS; transfer_id++) {
-            free(strmh->transfers[transfer_id]->buffer);
-            libusb_free_transfer(strmh->transfers[transfer_id]);
-            strmh->transfers[transfer_id] = 0;
+            if (strmh->transfers[transfer_id]) {
+                free(strmh->transfers[transfer_id]->buffer);
+                libusb_free_transfer(strmh->transfers[transfer_id]);
+                strmh->transfers[transfer_id] = 0;
+            }
         }
-        ret = UVC_SUCCESS;
+
+        if (submitted_count > 0) {
+            /* CRITICAL: Some transfers were already submitted and are in-flight.
+             * We must NOT destroy the stream handle yet — the libusb event thread
+             * will call _uvc_stream_callback when those transfers complete.
+             * Keep strmh->running=1 so that uvc_stream_close() calls uvc_stream_stop()
+             * which properly cancels in-flight transfers and waits for reaping. */
+            LOGW("uvc_stream_start: %d transfers in-flight, keeping running=1 for safe cleanup",
+                 submitted_count);
+            UVC_EXIT(ret);
+            return ret;
+        }
+        /* No transfers were submitted, safe to do normal cleanup */
+        goto fail;
     }
 
     UVC_EXIT(ret);

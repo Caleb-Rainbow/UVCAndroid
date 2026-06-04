@@ -97,14 +97,29 @@ class CameraConnectionService {
         private void removeCamera(final UsbDevice device) {
             if (DEBUG) Log.d(TAG, "removeCamera:device=" + device.getDeviceName());
             final String key = getCameraKey(device);
+            final CameraInternal service;
             synchronized (mConnectionSync) {
                 mLastCameraKey = key;
-                final CameraInternal service = mCameras.get(key);
-                if (service != null) {
-                    service.release();
-                }
-                mCameras.remove(key);
+                // Remove from map immediately so replug can create a new CameraInternal
+                // without waiting for the old one to finish releasing.
+                service = mCameras.remove(key);
                 mConnectionSync.notifyAll();
+            }
+            if (service != null) {
+                // Release asynchronously to avoid blocking mListenerHandler.
+                // Native stopPreview() calls pthread_join on the preview thread,
+                // which can block for a long time if the USB device was physically
+                // disconnected while streaming (the preview thread may be stuck in
+                // USB I/O that takes seconds to time out).
+                // By releasing on a background thread, the mListenerHandler remains
+                // free to process onAttach for a replugged camera immediately.
+                new Thread(() -> {
+                    try {
+                        service.release();
+                    } catch (final Exception e) {
+                        Log.w(TAG, "removeCamera:release:", e);
+                    }
+                }, "CameraRelease-" + key).start();
             }
             checkExistCamera();
         }
@@ -442,26 +457,51 @@ class CameraConnectionService {
         @Override
         public void releaseCamera(final UsbDevice device) {
             if (DEBUG) Log.d(TAG, LOG_PREFIX + "release:");
-            String cameraKey = getCameraKey(device);
+            final String cameraKey = getCameraKey(device);
+            final CameraInternal service;
             synchronized (mConnectionSync) {
-                final CameraInternal cameraInternal = mCameras.get(cameraKey);
-                if (cameraInternal != null) {
-                    cameraInternal.release();
-                }
-                mCameras.remove(cameraKey);
+                // Remove from map immediately so the camera can be re-opened
+                // without waiting for the native release to complete.
+                service = mCameras.remove(cameraKey);
+                mConnectionSync.notifyAll();
+            }
+            if (service != null) {
+                // Release asynchronously: native stopPreview() calls pthread_join
+                // on the preview thread, which can block for seconds if the USB
+                // device was physically disconnected while streaming.
+                new Thread(() -> {
+                    try {
+                        service.release();
+                    } catch (final Exception e) {
+                        Log.w(TAG, "releaseCamera:release:", e);
+                    }
+                }, "CameraRelease-" + cameraKey).start();
             }
         }
 
         @Override
         public void releaseAllCamera() {
             if (DEBUG) Log.d(TAG, LOG_PREFIX + "releaseAll:");
+            final java.util.List<CameraInternal> toRelease;
             synchronized (mConnectionSync) {
-                for (CameraInternal cameraInternal : mCameras.values()) {
-                    if (cameraInternal != null) {
-                        cameraInternal.release();
-                    }
-                }
+                toRelease = new java.util.ArrayList<>(mCameras.values());
                 mCameras.clear();
+                mConnectionSync.notifyAll();
+            }
+            if (!toRelease.isEmpty()) {
+                // Release all cameras on a single background thread sequentially.
+                // Each release may block due to native pthread_join on USB I/O.
+                new Thread(() -> {
+                    for (CameraInternal service : toRelease) {
+                        if (service != null) {
+                            try {
+                                service.release();
+                            } catch (final Exception e) {
+                                Log.w(TAG, "releaseAllCamera:release:", e);
+                            }
+                        }
+                    }
+                }, "CameraReleaseAll").start();
             }
         }
 
