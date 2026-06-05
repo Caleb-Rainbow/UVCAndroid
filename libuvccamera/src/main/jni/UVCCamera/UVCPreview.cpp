@@ -83,7 +83,14 @@ UVCPreview::~UVCPreview() {
     if (mCaptureWindow)
         ANativeWindow_release(mCaptureWindow);
     mCaptureWindow = NULL;
-    mFrameCallbackObj = NULL;
+    // Release JNI global reference to prevent leak
+    if (mFrameCallbackObj) {
+        JNIEnv *env = getEnv();
+        if (env) {
+            env->DeleteGlobalRef(mFrameCallbackObj);
+        }
+        mFrameCallbackObj = NULL;
+    }
     iframecallback_fields.onFrame = NULL;
     clearPreviewFrame();
     clearCaptureFrame();
@@ -655,6 +662,17 @@ int copyToSurface(uvc_frame_t *frame, ANativeWindow **window) {
     if (LIKELY(*window)) {
         ANativeWindow_Buffer buffer;
         if (LIKELY(ANativeWindow_lock(*window, &buffer, NULL) == 0)) {
+
+            // Bounds check: ensure frame has enough pixel data for the copy.
+            // frame->data_bytes may not match buffer dimensions if the frame is corrupt
+            // or a resolution mismatch occurred.
+            const size_t required_bytes = (size_t)buffer.width * buffer.height * PREVIEW_PIXEL_BYTES;
+            if (UNLIKELY(frame->data_bytes < required_bytes)) {
+                LOGW("copyToSurface: frame data too small (%zu < %zu), skipping",
+                     frame->data_bytes, required_bytes);
+                ANativeWindow_unlockAndPost(*window);
+                return -1;
+            }
 
             if (frame->width >= buffer.stride) {
                 memcpy(buffer.bits, frame->data,

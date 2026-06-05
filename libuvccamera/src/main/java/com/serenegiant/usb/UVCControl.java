@@ -511,7 +511,7 @@ public class UVCControl {
     }
 
     public synchronized void resetFocusRelative() {
-        nativeSetFocusRelative(mNativePtr, mFocusAbsoluteDef);
+        nativeSetFocusRelative(mNativePtr, mFocusRelativeDef);
     }
 
     //================================================================================
@@ -1395,7 +1395,7 @@ public class UVCControl {
     }
 
     public synchronized void resetWhiteBalanceCompo() {
-        nativeSetZoomRelative(mNativePtr, mWhiteBalanceCompoDef);
+        nativeSetWhiteBalanceCompo(mNativePtr, mWhiteBalanceCompoDef);
     }
 
     //================================================================================

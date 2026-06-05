@@ -132,19 +132,34 @@ int uvc_mjpeg2rgbx_new(uvc_frame_t *in, uvc_frame_t *out) {
 
     int width = in->width;
     int height = in->height;
-    unsigned char *srcNV21 = (unsigned char *) malloc(width * height * PIXEL_NV21);
-    unsigned char *src_nv21_y_data = (unsigned char *) in;
-    unsigned char *src_nv21_uv_data = (unsigned char *) in + width * height;
+
+    // Allocate intermediate NV21 buffer for MJPEG -> NV21 -> RGB conversion.
+    // NV21 layout: Y plane (width * height bytes) + VU interleaved plane (width * height / 2 bytes).
+    const int nv21_y_stride = width;
+    const int nv21_uv_stride = width;
+    const size_t nv21_y_size = (size_t)width * height;
+    const size_t nv21_total = nv21_y_size + nv21_y_size / 2;
+
+    unsigned char *nv21_buf = (unsigned char *) malloc(nv21_total);
+    if (!nv21_buf) {
+        LOGE("uvc_mjpeg2rgbx_new: failed to allocate NV21 buffer (%zu bytes)", nv21_total);
+        return UVC_ERROR_NO_MEM;
+    }
+
+    unsigned char *nv21_y_data = nv21_buf;
+    unsigned char *nv21_uv_data = nv21_buf + nv21_y_size;
 
     int result = libyuv::MJPGToNV21(in_data, in->data_bytes,
-                                    src_nv21_y_data, width, src_nv21_uv_data, width,
+                                    nv21_y_data, nv21_y_stride,
+                                    nv21_uv_data, nv21_uv_stride,
                                     width, height, width, height);
     if (result == 0) {
-        result = libyuv::NV21ToRGB24(src_nv21_y_data, width, src_nv21_uv_data, width,
+        result = libyuv::NV21ToRGB24(nv21_y_data, nv21_y_stride,
+                                     nv21_uv_data, nv21_uv_stride,
                                      out_data, width * PIXEL_RGB, width, height);
     }
 
-    free(srcNV21);
+    free(nv21_buf);
 
     return result;
 }

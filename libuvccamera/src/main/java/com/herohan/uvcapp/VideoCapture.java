@@ -297,7 +297,10 @@ public class VideoCapture {
 
         OnVideoCaptureCallback postListener = new VideoCaptureListenerWrapper(callback);
 
-        if (mRendererHolderWeak.get() == null) {
+        // Capture the renderer holder reference once to avoid TOCTOU race
+        // between the null check and later usage.
+        final ICameraRendererHolder rendererHolder = mRendererHolderWeak.get();
+        if (rendererHolder == null) {
             // Not bound. Notify callback.
             postListener.onError(ERROR_INVALID_CAMERA,
                     "Not bound to a Camera", null);
@@ -365,8 +368,9 @@ public class VideoCapture {
         mRecordingFuture = new FutureTask<>(new Callable<String>() {
             @Override
             public String call() throws Exception {
-                if (mRendererHolderWeak.get() != null && mCameraSurface != null) {
-                    mRendererHolderWeak.get().removeSlaveSurface(mCameraSurface.hashCode());
+                final ICameraRendererHolder rh = mRendererHolderWeak.get();
+                if (rh != null && mCameraSurface != null) {
+                    rh.removeSlaveSurface(mCameraSurface.hashCode());
                 }
 
                 if (mRecordingWaitRelease.get()) {
@@ -427,7 +431,7 @@ public class VideoCapture {
         postListener.onStart();
 
         // Attach Surface to renderer holder.
-        mRendererHolderWeak.get().addSlaveSurface(mCameraSurface.hashCode(), mCameraSurface, true);
+        rendererHolder.addSlaveSurface(mCameraSurface.hashCode(), mCameraSurface, true);
 
         if (mIsAudioEnabled.get()) {
             mAudioHandler.post(() -> audioEncode(postListener));
@@ -477,12 +481,34 @@ public class VideoCapture {
         } else {
             releaseResources();
         }
+
+        // Shutdown the executor and wait for pending tasks to complete
+        if (mExecutor != null) {
+            mExecutor.shutdown();
+            mExecutor = null;
+        }
     }
 
     private void releaseResources() {
+        // Signal handler threads to quit, then wait for them to finish
+        // before releasing encoder resources to avoid native crashes.
         mVideoHandlerThread.quitSafely();
+        mAudioHandlerThread.quitSafely();
 
-        // audio encoder release
+        try {
+            mVideoHandlerThread.join(3000);
+        } catch (InterruptedException e) {
+            Log.w(TAG, "Interrupted while waiting for video handler thread to finish", e);
+            Thread.currentThread().interrupt();
+        }
+        try {
+            mAudioHandlerThread.join(3000);
+        } catch (InterruptedException e) {
+            Log.w(TAG, "Interrupted while waiting for audio handler thread to finish", e);
+            Thread.currentThread().interrupt();
+        }
+
+        // audio encoder release — safe now that audio handler thread has finished
         releaseAudioInputResource();
 
         if (mCameraSurface != null) {
@@ -491,7 +517,6 @@ public class VideoCapture {
     }
 
     private void releaseAudioInputResource() {
-        mAudioHandlerThread.quitSafely();
         if (mAudioEncoder != null) {
             mAudioEncoder.release();
             mAudioEncoder = null;
@@ -696,6 +721,14 @@ public class VideoCapture {
 
     private boolean writeAudioEncodedBuffer(int bufferIndex) {
         ByteBuffer buffer = getOutputBuffer(mAudioEncoder, bufferIndex);
+        // Guard against null output buffer — getOutputBuffer can return null
+        if (buffer == null) {
+            Log.d(TAG, "Audio OutputBuffer was null.");
+            if (bufferIndex >= 0) {
+                mAudioEncoder.releaseOutputBuffer(bufferIndex, false);
+            }
+            return false;
+        }
         buffer.position(mAudioBufferInfo.offset);
         if (mMuxerStarted.get()) {
             try {

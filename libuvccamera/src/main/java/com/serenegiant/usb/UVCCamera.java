@@ -225,6 +225,14 @@ public class UVCCamera {
     }
 
     /**
+     * Whether the camera has been closed (native resources released).
+     * After close(), mNativePtr is zeroed to prevent use-after-free,
+     * but we keep a separate flag so destroy() knows the C++ object
+     * still needs to be freed.
+     */
+    private long mNativePtrForDestroy = 0;
+
+    /**
      * close and release UVC camera
      */
     public synchronized void close(boolean isSilent) {
@@ -232,7 +240,10 @@ public class UVCCamera {
         stopPreview();
         if (mNativePtr != 0) {
             nativeRelease(mNativePtr);
-//    		mNativePtr = 0;	// nativeDestroyを呼ぶのでここでクリアしちゃダメ
+            // Save for destroy() which frees the C++ object itself.
+            // Zero mNativePtr to prevent any further native calls (use-after-free guard).
+            mNativePtrForDestroy = mNativePtr;
+            mNativePtr = 0;
         }
         if (mCtrlBlock != null) {
             mCtrlBlock.close(isSilent);
@@ -512,6 +523,8 @@ public class UVCCamera {
         nativeSetPreviewDisplay(mNativePtr, holder.getSurface());
     }
 
+    private Surface mPreviewSurfaceFromTexture;
+
     /**
      * set preview surface with SurfaceTexture.
      * this method require API >= 14
@@ -519,8 +532,16 @@ public class UVCCamera {
      * @param texture
      */
     public synchronized void setPreviewTexture(final SurfaceTexture texture) {    // API >= 11
-        final Surface surface = new Surface(texture);    // XXX API >= 14
-        nativeSetPreviewDisplay(mNativePtr, surface);
+        // Release previous Surface if it was created by this method
+        if (mPreviewSurfaceFromTexture != null) {
+            mPreviewSurfaceFromTexture.release();
+            mPreviewSurfaceFromTexture = null;
+        }
+        if (mNativePtr != 0) {
+            final Surface surface = new Surface(texture);    // API >= 14
+            mPreviewSurfaceFromTexture = surface;
+            nativeSetPreviewDisplay(mNativePtr, surface);
+        }
     }
 
     /**
@@ -602,9 +623,9 @@ public class UVCCamera {
      */
     public synchronized void destroy(boolean isSilent) {
         close(isSilent);
-        if (mNativePtr != 0) {
-            nativeDestroy(mNativePtr);
-            mNativePtr = 0;
+        if (mNativePtrForDestroy != 0) {
+            nativeDestroy(mNativePtrForDestroy);
+            mNativePtrForDestroy = 0;
         }
     }
 

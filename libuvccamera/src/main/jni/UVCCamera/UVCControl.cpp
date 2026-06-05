@@ -899,7 +899,7 @@ int UVCControl::setFocusRelative(int focus_rel) {
 int UVCControl::getFocusRelative() {
     ENTER();
     if (mCTControls & CT_FOCUS_RELATIVE_CONTROL) {
-        int ret = update_ctrl_values(mDeviceHandle, mFocusRelative, uvc_get_focus_abs);
+        int ret = update_ctrl_values(mDeviceHandle, mFocusRelative, uvc_get_focus_rel);
         if (LIKELY(!ret)) {
             int8_t focus;
             uint8_t speed;
@@ -959,7 +959,7 @@ int UVCControl::obtainIrisRelativeLimit(int &min, int &max, int &def) {
     ENTER();
     int ret = UVC_ERROR_ACCESS;
     if (mCTControls & CT_IRIS_RELATIVE_CONTROL) {
-        UPDATE_CTRL_VALUES(mIrisAbsolute, uvc_get_iris_rel);
+        UPDATE_CTRL_VALUES(mIrisRelative, uvc_get_iris_rel);
     }
     RETURN(ret, int);
 }
@@ -972,7 +972,7 @@ int UVCControl::setIrisRelative(int iris_rel) {
     pthread_mutex_lock(&mRequestMutex);
     {
         if (mCTControls & CT_IRIS_RELATIVE_CONTROL) {
-            ret = internalSetCtrlValue(mIrisAbsolute, iris_rel, uvc_get_iris_rel, uvc_set_iris_rel);
+            ret = internalSetCtrlValue(mIrisRelative, iris_rel, uvc_get_iris_rel, uvc_set_iris_rel);
         }
     }
     pthread_mutex_unlock(&mRequestMutex);
@@ -984,7 +984,7 @@ int UVCControl::setIrisRelative(int iris_rel) {
 int UVCControl::getIrisRelative() {
     ENTER();
     if (mCTControls & CT_IRIS_RELATIVE_CONTROL) {
-        int ret = update_ctrl_values(mDeviceHandle, mIrisAbsolute, uvc_get_iris_rel);
+        int ret = update_ctrl_values(mDeviceHandle, mIrisRelative, uvc_get_iris_rel);
         if (LIKELY(!ret)) {
             uint8_t iris_rel;
             ret = uvc_get_iris_rel(mDeviceHandle, &iris_rel, UVC_GET_CUR);
@@ -1121,14 +1121,13 @@ int UVCControl::setPanAbsolute(int pan) {
                 if (LIKELY(!ret)) {
                     mPanAbsolute.current = _pan;
                     mTiltAbsolute.current = tilt;
-                } else {
-                    RETURN(ret, int);
-                }
 
-                ret = uvc_set_pantilt_abs(mDeviceHandle, pan, tilt);
-                if (LIKELY(!ret)) {
-                    mPanAbsolute.current = pan;
+                    ret = uvc_set_pantilt_abs(mDeviceHandle, pan, tilt);
+                    if (LIKELY(!ret)) {
+                        mPanAbsolute.current = pan;
+                    }
                 }
+                // If uvc_get_pantilt_abs failed, ret is already set — just fall through to unlock
             }
         }
     }
@@ -1193,14 +1192,13 @@ int UVCControl::setTiltAbsolute(int tilt) {
                 if (LIKELY(!ret)) {
                     mPanAbsolute.current = pan;
                     mTiltAbsolute.current = _tilt;
-                } else {
-                    RETURN(ret, int);
-                }
 
-                ret = uvc_set_pantilt_abs(mDeviceHandle, pan, tilt);
-                if (LIKELY(!ret)) {
-                    mTiltAbsolute.current = tilt;
+                    ret = uvc_set_pantilt_abs(mDeviceHandle, pan, tilt);
+                    if (LIKELY(!ret)) {
+                        mTiltAbsolute.current = tilt;
+                    }
                 }
+                // If uvc_get_pantilt_abs failed, ret is already set — just fall through to unlock
             }
         }
     }
@@ -1376,7 +1374,7 @@ int UVCControl::obtainPrivacyLimit(int &min, int &max, int &def) {
     ENTER();
     int ret = UVC_ERROR_ACCESS;
     if (mCTControls & CT_PRIVACY_CONTROL) {
-        UPDATE_CTRL_VALUES(mPrivacy, uvc_get_focus_abs);
+        UPDATE_CTRL_VALUES(mPrivacy, uvc_get_privacy);
     }
     RETURN(ret, int);
 }
@@ -1953,9 +1951,9 @@ int UVCControl::setPowerlineFrequency(int frequency) {
             if (frequency < 0) {
                 uint8_t value;
                 ret = uvc_get_power_line_frequency(mDeviceHandle, &value, UVC_GET_DEF);
-                if LIKELY(ret)
-                    frequency = value;
-                else RETURN(ret, int);
+                if (UNLIKELY(ret))
+                    RETURN(ret, int);
+                frequency = value;
             }
             LOGD("frequency:%d", frequency);
             ret = uvc_set_power_line_frequency(mDeviceHandle, frequency);
@@ -2291,7 +2289,7 @@ int UVCControl::obtainContrastAutoLimit(int &min, int &max, int &def) {
     ENTER();
     int ret = UVC_ERROR_ACCESS;
     if (mPUControls & PU_CONTRAST_AUTO_CONTROL) {
-        UPDATE_CTRL_VALUES(mFocusAuto, uvc_get_contrast_auto);
+        UPDATE_CTRL_VALUES(mContrastAuto, uvc_get_contrast_auto);
     }
     RETURN(ret, int);
 }
