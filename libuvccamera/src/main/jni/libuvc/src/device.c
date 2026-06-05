@@ -244,6 +244,7 @@ uvc_error_t uvc_find_devices(
     UVC_EXIT(UVC_SUCCESS);
     return UVC_SUCCESS;
   } else {
+    free(list_internal);
     UVC_EXIT(UVC_ERROR_NO_DEVICE);
     return UVC_ERROR_NO_DEVICE;
   }

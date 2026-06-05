@@ -222,14 +222,12 @@ int UVCPreview::setPreviewDisplay(ANativeWindow *preview_window) {
     ENTER();
     pthread_mutex_lock(&preview_mutex);
     {
-        if (mPreviewWindow != preview_window) {
-            if (mPreviewWindow)
-                ANativeWindow_release(mPreviewWindow);
-            mPreviewWindow = preview_window;
-            if (LIKELY(mPreviewWindow)) {
-                ANativeWindow_setBuffersGeometry(mPreviewWindow,
-                                                 frameWidth, frameHeight, previewFormat);
-            }
+        if (mPreviewWindow)
+            ANativeWindow_release(mPreviewWindow);
+        mPreviewWindow = preview_window;
+        if (LIKELY(mPreviewWindow)) {
+            ANativeWindow_setBuffersGeometry(mPreviewWindow,
+                                             frameWidth, frameHeight, previewFormat);
         }
     }
     pthread_mutex_unlock(&preview_mutex);
@@ -725,24 +723,23 @@ int UVCPreview::setCaptureDisplay(ANativeWindow *capture_window) {
                 pthread_cond_wait(&capture_sync, &capture_mutex);    // wait finishing capturing
             }
         }
-        if (mCaptureWindow != capture_window) {
-            // release current Surface if already assigned.
-            if (UNLIKELY(mCaptureWindow))
+        // Always accept the new window (caller obtained a fresh ANativeWindow_fromSurface ref).
+        // Release the old one regardless of pointer equality to avoid ref-count leaks.
+        if (UNLIKELY(mCaptureWindow))
+            ANativeWindow_release(mCaptureWindow);
+        mCaptureWindow = capture_window;
+        // if you use Surface came from MediaCodec#createInputSurface
+        // you could not change window format at least when you use
+        // ANativeWindow_lock / ANativeWindow_unlockAndPost
+        // to write frame data to the Surface...
+        // So we need check here.
+        if (mCaptureWindow) {
+            int32_t window_format = ANativeWindow_getFormat(mCaptureWindow);
+            if ((window_format != WINDOW_FORMAT_RGB_565)
+                && (previewFormat == WINDOW_FORMAT_RGB_565)) {
+                LOGE("window format mismatch, cancelled movie capturing.");
                 ANativeWindow_release(mCaptureWindow);
-            mCaptureWindow = capture_window;
-            // if you use Surface came from MediaCodec#createInputSurface
-            // you could not change window format at least when you use
-            // ANativeWindow_lock / ANativeWindow_unlockAndPost
-            // to write frame data to the Surface...
-            // So we need check here.
-            if (mCaptureWindow) {
-                int32_t window_format = ANativeWindow_getFormat(mCaptureWindow);
-                if ((window_format != WINDOW_FORMAT_RGB_565)
-                    && (previewFormat == WINDOW_FORMAT_RGB_565)) {
-                    LOGE("window format mismatch, cancelled movie capturing.");
-                    ANativeWindow_release(mCaptureWindow);
-                    mCaptureWindow = NULL;
-                }
+                mCaptureWindow = NULL;
             }
         }
     }
@@ -876,9 +873,16 @@ void UVCPreview::do_capture_surface(JNIEnv *env) {
         }
     }
 
-    if (mCaptureWindow) {
-        ANativeWindow_release(mCaptureWindow);
-        mCaptureWindow = NULL;
+    {
+        ANativeWindow *window_to_release = NULL;
+        pthread_mutex_lock(&capture_mutex);
+        {
+            window_to_release = mCaptureWindow;
+            mCaptureWindow = NULL;
+        }
+        pthread_mutex_unlock(&capture_mutex);
+        if (window_to_release)
+            ANativeWindow_release(window_to_release);
     }
 
     EXIT();

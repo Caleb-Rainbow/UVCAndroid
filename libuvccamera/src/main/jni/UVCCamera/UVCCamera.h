@@ -50,6 +50,12 @@ public:
 
     ~UVCCamera();
 
+    // Prevent copy and move — class manages exclusive native resources
+    UVCCamera(const UVCCamera &) = delete;
+    UVCCamera &operator=(const UVCCamera &) = delete;
+    UVCCamera(UVCCamera &&) = delete;
+    UVCCamera &operator=(UVCCamera &&) = delete;
+
     UVCControl *getControl();
 
     int connect(int fd, int quirks);

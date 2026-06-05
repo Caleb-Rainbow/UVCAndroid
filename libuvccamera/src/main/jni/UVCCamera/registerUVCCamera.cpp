@@ -183,10 +183,12 @@ static jint nativeSetStatusCallback(JNIEnv *env, jobject thiz,
 
     jint result = JNI_ERR;
     ENTER();
+    jobject status_callback_obj = env->NewGlobalRef(jIStatusCallback);
     UVCCamera *camera = reinterpret_cast<UVCCamera *>(id_camera);
     if (LIKELY(camera)) {
-        jobject status_callback_obj = env->NewGlobalRef(jIStatusCallback);
         result = camera->setStatusCallback(env, status_callback_obj);
+    } else if (status_callback_obj) {
+        env->DeleteGlobalRef(status_callback_obj);
     }
     RETURN(result, jint);
 }
@@ -196,10 +198,12 @@ static jint nativeSetButtonCallback(JNIEnv *env, jobject thiz,
 
     jint result = JNI_ERR;
     ENTER();
+    jobject button_callback_obj = env->NewGlobalRef(jIButtonCallback);
     UVCCamera *camera = reinterpret_cast<UVCCamera *>(id_camera);
     if (LIKELY(camera)) {
-        jobject button_callback_obj = env->NewGlobalRef(jIButtonCallback);
         result = camera->setButtonCallback(env, button_callback_obj);
+    } else if (button_callback_obj) {
+        env->DeleteGlobalRef(button_callback_obj);
     }
     RETURN(result, jint);
 }
@@ -276,10 +280,12 @@ static jint nativeSetFrameCallback(JNIEnv *env, jobject thiz,
 
     jint result = JNI_ERR;
     ENTER();
+    jobject frame_callback_obj = env->NewGlobalRef(jIFrameCallback);
     UVCCamera *camera = reinterpret_cast<UVCCamera *>(id_camera);
     if (LIKELY(camera)) {
-        jobject frame_callback_obj = env->NewGlobalRef(jIFrameCallback);
         result = camera->setFrameCallback(env, frame_callback_obj, pixel_format);
+    } else if (frame_callback_obj) {
+        env->DeleteGlobalRef(frame_callback_obj);
     }
     RETURN(result, jint);
 }
@@ -306,10 +312,11 @@ static jint registerNativeMethods(JNIEnv *env, const char *class_name, JNINative
 
     jclass clazz = env->FindClass(class_name);
     if (LIKELY(clazz)) {
-        int result = env->RegisterNatives(clazz, methods, num_methods);
+        result = env->RegisterNatives(clazz, methods, num_methods);
         if (UNLIKELY(result < 0)) {
             LOGE("registerNativeMethods failed(class=%s)", class_name);
         }
+        env->DeleteLocalRef(clazz);
     } else {
         LOGE("registerNativeMethods: class'%s' not found", class_name);
     }
