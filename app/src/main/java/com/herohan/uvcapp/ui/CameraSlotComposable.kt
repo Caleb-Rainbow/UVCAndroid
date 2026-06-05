@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.herohan.uvcapp.R
 import com.herohan.uvcapp.utils.TimeFormatter
+import android.widget.Toast
 import com.hjq.permissions.XXPermissions
 import com.hjq.permissions.permission.PermissionLists
 import kotlinx.coroutines.delay
@@ -148,10 +149,13 @@ fun CameraSlotComposable(
                     onClick = {
                         val activity = context as? android.app.Activity ?: return@FloatingActionButton
                         XXPermissions.with(activity)
-                            .permission(PermissionLists.getManageExternalStoragePermission())
                             .permission(PermissionLists.getRecordAudioPermission())
                             .request { _, allGranted ->
-                                if (allGranted) controller.toggleVideoRecord()
+                                if (allGranted) {
+                                    controller.toggleVideoRecord()
+                                } else {
+                                    Toast.makeText(activity, "需要录音权限才能录制视频", Toast.LENGTH_SHORT).show()
+                                }
                             }
                     },
                     containerColor = if (state.isRecording) Color.Red
@@ -169,12 +173,7 @@ fun CameraSlotComposable(
 
                 FloatingActionButton(
                     onClick = {
-                        val activity = context as? android.app.Activity ?: return@FloatingActionButton
-                        XXPermissions.with(activity)
-                            .permission(PermissionLists.getManageExternalStoragePermission())
-                            .request { _, allGranted ->
-                                if (allGranted) controller.takePicture()
-                            }
+                        controller.takePicture()
                     },
                 ) {
                     Icon(

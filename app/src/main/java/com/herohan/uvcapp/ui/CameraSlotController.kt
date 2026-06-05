@@ -1,5 +1,6 @@
 package com.herohan.uvcapp.ui
 
+import android.content.Context
 import android.hardware.usb.UsbDevice
 import android.os.Handler
 import android.os.Looper
@@ -8,6 +9,7 @@ import com.herohan.uvcapp.CameraHelper
 import com.herohan.uvcapp.ICameraHelper
 import com.herohan.uvcapp.IImageCapture
 import com.herohan.uvcapp.VideoCapture
+import com.herohan.uvcapp.utils.SaveHelper
 import com.serenegiant.opengl.renderer.MirrorMode
 import com.serenegiant.usb.Size
 import com.serenegiant.usb.UVCControl
@@ -16,11 +18,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.io.File
 import java.io.IOException
-import java.util.concurrent.CancellationException
 
 class CameraSlotController(
     val slotId: String,
     val slotIndex: Int,
+    private val appContext: Context,
 ) {
 
     companion object {
@@ -37,6 +39,7 @@ class CameraSlotController(
     private val mainHandler = Handler(Looper.getMainLooper())
     @Volatile private var _previewStarted = false
     private var _previewCheckRunnable: Runnable? = null
+    @Volatile private var isReleased = false
 
     /** Called on the main thread whenever this slot's state changes. */
     var onStateChanged: (() -> Unit)? = null
@@ -49,7 +52,9 @@ class CameraSlotController(
     }
 
     private fun notifyStateChanged() {
-        onStateChanged?.invoke()
+        if (!isReleased) {
+            onStateChanged?.invoke()
+        }
     }
 
     private fun initCameraHelper() {
@@ -73,18 +78,22 @@ class CameraSlotController(
             }
 
             override fun onDeviceOpen(device: UsbDevice, isFirstOpen: Boolean) {
+                if (isReleased) return
                 _cameraHelper?.openCamera()
-                _cameraHelper?.setButtonCallback { button, state ->
-                    _state.update { it.copy(toastMessage = "按钮: $button, 状态: $state") }
+                _cameraHelper?.setButtonCallback { button, btnState ->
+                    if (isReleased) return@setButtonCallback
+                    _state.update { it.copy(toastMessage = "按钮: $button, 状态: $btnState") }
                     notifyStateChanged()
                 }
             }
 
             override fun onCameraOpen(device: UsbDevice) {
+                if (isReleased) return
                 _cameraHelper?.startPreview()
                 // Start timeout to detect silent preview failure (USB bandwidth exhaustion)
                 _previewStarted = false
                 _previewCheckRunnable = Runnable {
+                    if (isReleased) return@Runnable
                     if (!_previewStarted && _state.value.isCameraConnected) {
                         _cameraHelper?.closeCamera()
                         _state.update {
@@ -96,7 +105,9 @@ class CameraSlotController(
                         notifyStateChanged()
                         // Delay removal so toast can be shown
                         mainHandler.postDelayed({
-                            onRemoveRequested?.invoke()
+                            if (!isReleased) {
+                                onRemoveRequested?.invoke()
+                            }
                         }, 100)
                     }
                 }
@@ -123,6 +134,7 @@ class CameraSlotController(
             }
 
             override fun onCameraClose(device: UsbDevice) {
+                if (isReleased) return
                 if (_state.value.isRecording) {
                     stopRecordInternal()
                 }
@@ -141,6 +153,7 @@ class CameraSlotController(
             override fun onDeviceClose(device: UsbDevice) {}
 
             override fun onDetach(device: UsbDevice) {
+                if (isReleased) return
                 if (device == _state.value.boundDevice) {
                     _state.update { it.copy(boundDevice = null) }
                     notifyStateChanged()
@@ -148,11 +161,13 @@ class CameraSlotController(
             }
 
             override fun onCancel(device: UsbDevice) {
+                if (isReleased) return
                 _state.update { it.copy(boundDevice = null) }
                 notifyStateChanged()
             }
 
             override fun onError(device: UsbDevice, e: CameraException) {
+                if (isReleased) return
                 _state.update {
                     it.copy(
                         isCameraConnected = false,
@@ -185,10 +200,11 @@ class CameraSlotController(
     fun takePicture() {
         if (_state.value.isRecording) return
         try {
-            val file = File(com.herohan.uvcapp.utils.SaveHelper.getSavePhotoPath())
+            val file = File(SaveHelper.getSavePhotoPath(appContext))
             val options = IImageCapture.OutputFileOptions.Builder(file).build()
             _cameraHelper?.takePicture(options, object : IImageCapture.OnImageCaptureCallback {
                 override fun onImageSaved(outputFileResults: IImageCapture.OutputFileResults) {
+                    if (isReleased) return
                     _state.update {
                         it.copy(
                             toastMessage = "已保存: ${outputFileResults.savedUri?.path ?: file.absolutePath}"
@@ -198,14 +214,13 @@ class CameraSlotController(
                 }
 
                 override fun onError(imageCaptureError: Int, message: String, cause: Throwable?) {
-                    _state.update { it.copy(toastMessage = message) }
+                    if (isReleased) return
+                    _state.update { it.copy(toastMessage = "拍照失败") }
                     notifyStateChanged()
                 }
             })
-        } catch (e: CancellationException) {
-            throw e
         } catch (e: IOException) {
-            _state.update { it.copy(toastMessage = "保存失败: ${e.message}") }
+            _state.update { it.copy(toastMessage = "保存失败，请检查存储空间") }
             notifyStateChanged()
         } catch (e: SecurityException) {
             _state.update { it.copy(toastMessage = "权限被拒绝") }
@@ -223,11 +238,9 @@ class CameraSlotController(
             } else {
                 stopRecordInternal()
             }
-        } catch (e: CancellationException) {
-            throw e
         } catch (e: IOException) {
             stopRecordInternal()
-            _state.update { it.copy(toastMessage = "录像失败: ${e.message}") }
+            _state.update { it.copy(toastMessage = "录像失败，请检查存储空间") }
             notifyStateChanged()
         } catch (e: SecurityException) {
             stopRecordInternal()
@@ -245,15 +258,17 @@ class CameraSlotController(
     }
 
     private fun startRecord() {
-        val file = File(com.herohan.uvcapp.utils.SaveHelper.getSaveVideoPath())
+        val file = File(SaveHelper.getSaveVideoPath(appContext))
         val options = VideoCapture.OutputFileOptions.Builder(file).build()
         _cameraHelper?.startRecording(options, object : VideoCapture.OnVideoCaptureCallback {
             override fun onStart() {
+                if (isReleased) return
                 _state.update { it.copy(isRecording = true) }
                 notifyStateChanged()
             }
 
             override fun onVideoSaved(outputFileResults: VideoCapture.OutputFileResults) {
+                if (isReleased) return
                 _state.update { it.copy(isRecording = false, recordTimeMillis = 0) }
                 _state.update {
                     it.copy(
@@ -264,8 +279,9 @@ class CameraSlotController(
             }
 
             override fun onError(videoCaptureError: Int, message: String, cause: Throwable?) {
+                if (isReleased) return
                 _state.update { it.copy(isRecording = false, recordTimeMillis = 0) }
-                _state.update { it.copy(toastMessage = message) }
+                _state.update { it.copy(toastMessage = "录像失败") }
                 notifyStateChanged()
             }
         })
@@ -297,24 +313,32 @@ class CameraSlotController(
         rotation %= 360
         if (rotation < 0) rotation += 360
         _state.update { it.copy(previewRotation = rotation) }
-        _cameraHelper?.previewConfig =
-            _cameraHelper?.previewConfig?.setRotation(rotation) ?: return
+        val config = _cameraHelper?.previewConfig?.setRotation(rotation) ?: return
+        _cameraHelper?.previewConfig = config
         notifyStateChanged()
     }
 
     fun flipHorizontally() {
-        _cameraHelper?.previewConfig =
-            _cameraHelper?.previewConfig?.setMirror(MirrorMode.MIRROR_HORIZONTAL) ?: return
+        val config = _cameraHelper?.previewConfig?.setMirror(MirrorMode.MIRROR_HORIZONTAL)
+        if (config != null) {
+            _cameraHelper?.previewConfig = config
+        } else if (!isReleased) {
+            _state.update { it.copy(toastMessage = "无法翻转: 摄像头未就绪") }
+            notifyStateChanged()
+        }
     }
 
     fun flipVertically() {
-        _cameraHelper?.previewConfig =
-            _cameraHelper?.previewConfig?.setMirror(MirrorMode.MIRROR_VERTICAL) ?: return
+        val config = _cameraHelper?.previewConfig?.setMirror(MirrorMode.MIRROR_VERTICAL)
+        if (config != null) {
+            _cameraHelper?.previewConfig = config
+        } else if (!isReleased) {
+            _state.update { it.copy(toastMessage = "无法翻转: 摄像头未就绪") }
+            notifyStateChanged()
+        }
     }
 
     fun getUvcControl(): UVCControl? = _cameraHelper?.uvcControl
-
-    fun getDeviceList(): List<UsbDevice> = _cameraHelper?.deviceList ?: emptyList()
 
     // Dialog visibility
     fun showDeviceListDialog() {
@@ -360,6 +384,10 @@ class CameraSlotController(
     }
 
     fun release() {
+        if (isReleased) return
+        isReleased = true
+        onStateChanged = null
+        onRemoveRequested = null
         _previewCheckRunnable?.let { mainHandler.removeCallbacks(it) }
         _previewCheckRunnable = null
         _cameraHelper?.release()

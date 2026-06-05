@@ -21,6 +21,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +41,8 @@ fun CameraControlsDialog(
     control: UVCControl?,
     onDismiss: () -> Unit,
 ) {
+    var resetKey by remember { mutableIntStateOf(0) }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(),
@@ -58,7 +61,9 @@ fun CameraControlsDialog(
                     style = MaterialTheme.typography.bodyLarge,
                 )
             } else {
-                CameraControlsContent(control = control)
+                key(resetKey) {
+                    CameraControlsContent(control = control)
+                }
             }
 
             // Bottom buttons
@@ -74,6 +79,7 @@ fun CameraControlsDialog(
                 Spacer(modifier = Modifier.width(8.dp))
                 TextButton(onClick = {
                     control?.let { resetAllControls(it) }
+                    resetKey++
                 }) {
                     Text(stringResource(R.string.camera_controls_button_reset))
                 }

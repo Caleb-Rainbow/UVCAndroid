@@ -24,7 +24,7 @@ fun CameraPreview(
 ) {
     val aspectRatio = if (previewHeight > 0) previewWidth.toFloat() / previewHeight.toFloat() else 1f
 
-    val callbacks = remember {
+    val callbacks = remember(onFirstFrame) {
         object {
             var onAdd: ((SurfaceTexture) -> Unit)? = null
             var onRemove: ((SurfaceTexture) -> Unit)? = null

@@ -80,12 +80,13 @@ private fun MainScreen(
     var isLandscape by rememberSaveable { mutableStateOf(false) }
 
     val toggleLandscape: () -> Unit = {
-        val activity = context as ComponentActivity
-        isLandscape = !isLandscape
-        activity.requestedOrientation = if (isLandscape) {
-            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        } else {
-            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        (context as? ComponentActivity)?.let { activity ->
+            isLandscape = !isLandscape
+            activity.requestedOrientation = if (isLandscape) {
+                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            } else {
+                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            }
         }
     }
 

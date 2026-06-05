@@ -7,16 +7,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,9 +27,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.herohan.uvcapp.R
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DeviceListDialog(
     deviceList: List<UsbDevice>,
@@ -37,10 +41,22 @@ fun DeviceListDialog(
 ) {
     var selectedDevice by remember { mutableStateOf(currentDevice) }
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.device_list_dialog_title)) },
-        text = {
+        sheetState = rememberModalBottomSheetState(),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .navigationBarsPadding(),
+        ) {
+            Text(
+                text = stringResource(R.string.device_list_dialog_title),
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(bottom = 16.dp),
+            )
+
             if (deviceList.isEmpty()) {
                 Text(
                     text = stringResource(R.string.device_list_empty_tip),
@@ -48,11 +64,11 @@ fun DeviceListDialog(
                         .fillMaxWidth()
                         .padding(vertical = 32.dp),
                     style = MaterialTheme.typography.bodyLarge,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    textAlign = TextAlign.Center,
                 )
             } else {
                 LazyColumn {
-                    items(deviceList, key = { it.deviceName }) { device ->
+                    items(deviceList, key = { it.deviceId }) { device ->
                         DeviceItem(
                             device = device,
                             isSelected = device == selectedDevice,
@@ -61,24 +77,29 @@ fun DeviceListDialog(
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    selectedDevice?.let { onDeviceSelected(it) }
-                    onDismiss()
-                },
-                enabled = selectedDevice != null,
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.End,
             ) {
-                Text(stringResource(android.R.string.ok))
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.device_list_cancel_button))
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                TextButton(
+                    onClick = {
+                        selectedDevice?.let { onDeviceSelected(it) }
+                        onDismiss()
+                    },
+                    enabled = selectedDevice != null,
+                ) {
+                    Text(stringResource(android.R.string.ok))
+                }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.device_list_cancel_button))
-            }
-        },
-    )
+        }
+    }
 }
 
 @Composable

@@ -1,35 +1,56 @@
 package com.herohan.uvcapp.utils
 
-import android.net.Uri
+import android.content.Context
 import android.os.Environment
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 object SaveHelper {
 
-    private val baseStoragePath: String
-        get() = Environment.getExternalStorageDirectory().absolutePath +
-                File.separator + "USBCamera"
+    private const val PHOTO_DIR = "photo"
+    private const val VIDEO_DIR = "video"
 
-    fun getSavePhotoPath(): String {
-        val dateFolder = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())
-        val fileName = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss", Locale.getDefault()).format(Date()) + ".jpg"
-        val dir = File(baseStoragePath, "$dateFolder/photo")
-        if (!dir.exists()) dir.mkdirs()
+    /**
+     * Returns a save path under the app-private external storage.
+     * No MANAGE_EXTERNAL_STORAGE permission is needed.
+     */
+    fun getSavePhotoPath(context: Context): String {
+        val dir = getSaveDir(context, PHOTO_DIR)
+        val fileName = generateFileName("jpg")
         return File(dir, fileName).absolutePath
     }
 
-    fun getSaveVideoPath(): String {
-        val dateFolder = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())
-        val fileName = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss", Locale.getDefault()).format(Date()) + ".mp4"
-        val dir = File(baseStoragePath, "$dateFolder/video")
-        if (!dir.exists()) dir.mkdirs()
+    /**
+     * Returns a save path under the app-private external storage.
+     * No MANAGE_EXTERNAL_STORAGE permission is needed.
+     */
+    fun getSaveVideoPath(context: Context): String {
+        val dir = getSaveDir(context, VIDEO_DIR)
+        val fileName = generateFileName("mp4")
         return File(dir, fileName).absolutePath
     }
 
-    fun getSavePhotoUri(): Uri = Uri.fromFile(File(getSavePhotoPath()))
+    private fun getSaveDir(context: Context, subDir: String): File {
+        val dateFolder = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())
+        // Use app-private external storage — no special permission required
+        val baseDir = context.getExternalFilesDir(Environment.DIRECTORY_DCIM)
+            ?: File(context.filesDir, "USBCamera")
+        val dir = File(File(baseDir, "USBCamera"), "$dateFolder/$subDir")
+        if (!dir.exists() && !dir.mkdirs()) {
+            // Fallback to internal storage if external storage is unavailable
+            val fallback = File(context.filesDir, "USBCamera/$dateFolder/$subDir")
+            fallback.mkdirs()
+            return fallback
+        }
+        return dir
+    }
 
-    fun getSaveVideoUri(): Uri = Uri.fromFile(File(getSaveVideoPath()))
+    private fun generateFileName(extension: String): String {
+        val timestamp = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss", Locale.getDefault()).format(Date())
+        val unique = UUID.randomUUID().toString().take(8)
+        return "${timestamp}_$unique.$extension"
+    }
 }
