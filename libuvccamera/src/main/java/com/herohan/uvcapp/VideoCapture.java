@@ -588,6 +588,7 @@ public class VideoCapture {
                         createAudioMediaFormat(), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
             } catch (Exception e) {
                 handleAudioEncoderInitError(e);
+                releaseCameraSurface(false);
                 return;
             }
 

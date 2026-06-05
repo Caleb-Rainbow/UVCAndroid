@@ -21,6 +21,7 @@ UVCButtonCallback::UVCButtonCallback(uvc_device_handle_t *devh)
 UVCButtonCallback::~UVCButtonCallback() {
 
 	ENTER();
+	uvc_set_button_callback(mDeviceHandle, NULL, NULL);
 	pthread_mutex_lock(&button_mutex);
 	{
 		if (mButtonCallbackObj) {
@@ -57,6 +58,7 @@ int UVCButtonCallback::setCallback(JNIEnv *env, jobject button_callback_obj) {
 				} else {
 					LOGW("failed to get object class");
 				}
+				if (env->ExceptionCheck()) { env->ExceptionDescribe(); }
 				env->ExceptionClear();
 				if (!ibuttoncallback_fields.onButton) {
 					LOGE("Can't find IButtonCallback#onButton");
@@ -76,6 +78,7 @@ void UVCButtonCallback::notifyButtonCallback(JNIEnv* env, int button, int state)
 	{
 		if (mButtonCallbackObj) {
 			env->CallVoidMethod(mButtonCallbackObj, ibuttoncallback_fields.onButton, button, state);
+			if (env->ExceptionCheck()) { env->ExceptionDescribe(); }
 			env->ExceptionClear();
 		}
 	}

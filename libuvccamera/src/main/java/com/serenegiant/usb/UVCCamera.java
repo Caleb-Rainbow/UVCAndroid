@@ -520,7 +520,9 @@ public class UVCCamera {
      * @param holder
      */
     public synchronized void setPreviewDisplay(final SurfaceHolder holder) {
-        nativeSetPreviewDisplay(mNativePtr, holder.getSurface());
+        if (mNativePtr != 0) {
+            nativeSetPreviewDisplay(mNativePtr, holder.getSurface());
+        }
     }
 
     private Surface mPreviewSurfaceFromTexture;
@@ -550,7 +552,9 @@ public class UVCCamera {
      * @param surface
      */
     public synchronized void setPreviewDisplay(final Surface surface) {
-        nativeSetPreviewDisplay(mNativePtr, surface);
+        if (mNativePtr != 0) {
+            nativeSetPreviewDisplay(mNativePtr, surface);
+        }
     }
 
     /**
@@ -570,7 +574,7 @@ public class UVCCamera {
      * start preview
      */
     public synchronized void startPreview() {
-        if (mCtrlBlock != null) {
+        if (mCtrlBlock != null && mNativePtr != 0) {
             final int result = nativeStartPreview(mNativePtr);
             if (DEBUG) Log.d(TAG, "startPreview:result=" + result);
             if (result != 0) {
@@ -584,7 +588,7 @@ public class UVCCamera {
      */
     public synchronized void stopPreview() {
 //        setFrameCallback(null, 0);
-        if (mCtrlBlock != null) {
+        if (mCtrlBlock != null && mNativePtr != 0) {
             nativeStopPreview(mNativePtr);
         }
     }
@@ -595,7 +599,7 @@ public class UVCCamera {
      * @param surface
      */
     public void startCapture(final Surface surface) {
-        if (mCtrlBlock != null && surface != null) {
+        if (mCtrlBlock != null && surface != null && mNativePtr != 0) {
             nativeSetCaptureDisplay(mNativePtr, surface);
         } else {
             throw new NullPointerException("startCapture");
@@ -606,7 +610,7 @@ public class UVCCamera {
      * stop movie capturing
      */
     public void stopCapture() {
-        if (mCtrlBlock != null) {
+        if (mCtrlBlock != null && mNativePtr != 0) {
             nativeSetCaptureDisplay(mNativePtr, null);
         }
     }

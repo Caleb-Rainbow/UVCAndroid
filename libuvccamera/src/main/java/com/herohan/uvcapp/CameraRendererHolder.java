@@ -55,6 +55,10 @@ class CameraRendererHolder extends RendererHolder implements ICameraRendererHold
     @Override
     public void captureImage(OnImageCapturedCallback callback) {
         mRendererHandler.post(() -> {
+            if (mCaptureHolder == null) {
+                callback.onError(new IllegalStateException("CaptureHolder not initialized"));
+                return;
+            }
             // Capture still image
             try {
                 ImageRawData data = mCaptureHolder.captureImageRawData();

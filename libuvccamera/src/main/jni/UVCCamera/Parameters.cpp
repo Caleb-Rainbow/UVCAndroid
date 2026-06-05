@@ -130,6 +130,11 @@ static const char *_uvc_name_for_format_subtype(uint8_t subtype) {
 #define FRAME_INTERVAL_MAX			"maxFrameInterval"
 #define FRAME_INTERVAL_STEP			"frameIntervalStep"
 
+// Safely convert 100ns frame interval to FPS, guarding against divide-by-zero
+static inline uint32_t safeFps(uint32_t interval) {
+	return interval > 0 ? (10000000 / interval) : 0;
+}
+
 static void writerFormat(Writer<StringBuffer> &writer, uvc_format_desc_t *fmt_desc) {
 	uvc_frame_desc_t *frame_desc;
 	char work[256];
@@ -171,7 +176,7 @@ static void writerFormat(Writer<StringBuffer> &writer, uvc_format_desc_t *fmt_de
 				write(writer, FRAME_BITRATE_MAX, frame_desc->dwMaxBitRate);
 				write(writer, FRAME_FRAME_BUFFER_SIZE_MAX, frame_desc->dwMaxVideoFrameBufferSize);
 				write(writer, FRAME_INTERVAL_DEFAULT, frame_desc->dwDefaultFrameInterval);
-				write(writer, FRAME_FPS_DEFAULT, 10000000 / frame_desc->dwDefaultFrameInterval);
+				write(writer, FRAME_FPS_DEFAULT, safeFps(frame_desc->dwDefaultFrameInterval));
 
 				if (frame_desc->intervals) {
 					writer.String(FRAME_INTERVALS);
@@ -180,7 +185,7 @@ static void writerFormat(Writer<StringBuffer> &writer, uvc_format_desc_t *fmt_de
 						writer.StartObject();
 						write(writer, FRAME_INTERVAL_INDEX, (int ) (interval_ptr - frame_desc->intervals));
 						write(writer, FRAME_INTERVAL_VALUE, *interval_ptr);
-						write(writer, FRAME_INTERVAL_FPS, 10000000 / *interval_ptr);
+						write(writer, FRAME_INTERVAL_FPS, safeFps(*interval_ptr));
 						writer.EndObject();
 					}
 					writer.EndArray();
@@ -191,7 +196,7 @@ static void writerFormat(Writer<StringBuffer> &writer, uvc_format_desc_t *fmt_de
 					{
 						write(writer, FRAME_INTERVAL_INDEX, frame_desc->dwMinFrameInterval);
 						write(writer, FRAME_INTERVAL_VALUE, frame_desc->dwMinFrameInterval);
-						write(writer, FRAME_INTERVAL_FPS, 10000000 / frame_desc->dwMinFrameInterval);
+						write(writer, FRAME_INTERVAL_FPS, safeFps(frame_desc->dwMinFrameInterval));
 					}
 					writer.EndObject();
 					// 最大fps
@@ -200,7 +205,7 @@ static void writerFormat(Writer<StringBuffer> &writer, uvc_format_desc_t *fmt_de
 					{
 						write(writer, FRAME_INTERVAL_INDEX, frame_desc->dwMaxFrameInterval);
 						write(writer, FRAME_INTERVAL_VALUE, frame_desc->dwMaxFrameInterval);
-						write(writer, FRAME_INTERVAL_FPS, 10000000 / frame_desc->dwMaxFrameInterval);
+						write(writer, FRAME_INTERVAL_FPS, safeFps(frame_desc->dwMaxFrameInterval));
 					}
 					writer.EndObject();
 					if (frame_desc->dwFrameIntervalStep) {
@@ -210,7 +215,7 @@ static void writerFormat(Writer<StringBuffer> &writer, uvc_format_desc_t *fmt_de
 						{
 							write(writer, FRAME_INTERVAL_INDEX, frame_desc->dwFrameIntervalStep);
 							write(writer, FRAME_INTERVAL_VALUE, frame_desc->dwFrameIntervalStep);
-							write(writer, FRAME_INTERVAL_FPS, 10000000 / frame_desc->dwFrameIntervalStep);
+							write(writer, FRAME_INTERVAL_FPS, safeFps(frame_desc->dwFrameIntervalStep));
 						}
 						writer.EndObject();
 					}
@@ -392,7 +397,7 @@ char *UVCDiags::getSupportedFormats(const uvc_device_handle_t *deviceHandle) {
 								write(writer, FRAME_DESC_SUBTYPE, frame_desc->bDescriptorSubtype);
 								write(writer, FRAME_INTERVAL_DEFAULT, frame_desc->dwDefaultFrameInterval);
 								write(writer, FRAME_INTERVAL_TYPE, frame_desc->bFrameIntervalType);
-								write(writer, FRAME_FPS_DEFAULT, 10000000 / frame_desc->dwDefaultFrameInterval);
+								write(writer, FRAME_FPS_DEFAULT, safeFps(frame_desc->dwDefaultFrameInterval));
 
 								if (!frame_desc->bFrameIntervalType) {
 									// 最小fps
@@ -401,7 +406,7 @@ char *UVCDiags::getSupportedFormats(const uvc_device_handle_t *deviceHandle) {
 									{
 										write(writer, FRAME_INTERVAL_INDEX, frame_desc->dwMinFrameInterval);
 										write(writer, FRAME_INTERVAL_VALUE, frame_desc->dwMinFrameInterval);
-										write(writer, FRAME_INTERVAL_FPS, 10000000 / frame_desc->dwMinFrameInterval);
+										write(writer, FRAME_INTERVAL_FPS, safeFps(frame_desc->dwMinFrameInterval));
 									}
 									writer.EndObject();
 									// 最大fps
@@ -410,7 +415,7 @@ char *UVCDiags::getSupportedFormats(const uvc_device_handle_t *deviceHandle) {
 									{
 										write(writer, FRAME_INTERVAL_INDEX, frame_desc->dwMaxFrameInterval);
 										write(writer, FRAME_INTERVAL_VALUE, frame_desc->dwMaxFrameInterval);
-										write(writer, FRAME_INTERVAL_FPS, 10000000 / frame_desc->dwMaxFrameInterval);
+										write(writer, FRAME_INTERVAL_FPS, safeFps(frame_desc->dwMaxFrameInterval));
 									}
 									writer.EndObject();
 									if (frame_desc->dwFrameIntervalStep) {
@@ -420,7 +425,7 @@ char *UVCDiags::getSupportedFormats(const uvc_device_handle_t *deviceHandle) {
 										{
 											write(writer, FRAME_INTERVAL_INDEX, frame_desc->dwFrameIntervalStep);
 											write(writer, FRAME_INTERVAL_VALUE, frame_desc->dwFrameIntervalStep);
-											write(writer, FRAME_INTERVAL_FPS, 10000000 / frame_desc->dwFrameIntervalStep);
+											write(writer, FRAME_INTERVAL_FPS, safeFps(frame_desc->dwFrameIntervalStep));
 										}
 										writer.EndObject();
 									}
@@ -431,7 +436,7 @@ char *UVCDiags::getSupportedFormats(const uvc_device_handle_t *deviceHandle) {
 										writer.StartObject();
 										write(writer, FRAME_INTERVAL_INDEX, (int ) (interval_ptr - frame_desc->intervals));
 										write(writer, FRAME_INTERVAL_VALUE, *interval_ptr);
-										write(writer, FRAME_INTERVAL_FPS, 10000000 / *interval_ptr);
+										write(writer, FRAME_INTERVAL_FPS, safeFps(*interval_ptr));
 										writer.EndObject();
 									}
 									writer.EndArray();

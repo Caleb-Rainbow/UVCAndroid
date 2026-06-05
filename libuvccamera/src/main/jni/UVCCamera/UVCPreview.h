@@ -27,6 +27,7 @@
 
 #include "libUVCCamera.h"
 #include <pthread.h>
+#include <atomic>
 #include <android/native_window.h>
 #include "objectarray.h"
 #include "ConvertHelper.h"
@@ -60,7 +61,7 @@ class UVCPreview {
 private:
     uvc_device_handle_t *mDeviceHandle;
     ANativeWindow *mPreviewWindow;
-    volatile bool mIsRunning;
+    std::atomic<bool> mIsRunning;
 
     // request format
     int requestWidth, requestHeight, requestFormatType;
@@ -78,7 +79,7 @@ private:
     int previewFormat;
     size_t previewBytes;
 //
-    volatile bool mIsCapturing;
+    std::atomic<bool> mIsCapturing;
     ANativeWindow *mCaptureWindow;
     pthread_t capture_thread;
     pthread_mutex_t capture_mutex;

@@ -140,7 +140,9 @@ final class CameraInternal implements ICameraInternal {
             }
 
             // Preview size may changed, so set the resolution and reinitialize video encoder and audio encoder of VideoCapture
-            mVideoCapture.setResolution(getPreviewSize());
+            if (mVideoCapture != null) {
+                mVideoCapture.setResolution(getPreviewSize());
+            }
         } catch (final Exception e) {
             Log.e(TAG, "setPreviewSize:", e);
             // unexpectedly #setPreviewSize failed
@@ -150,6 +152,9 @@ final class CameraInternal implements ICameraInternal {
                     mUVCCamera = null;
                 }
             }
+            // Notify callbacks that the camera was destroyed due to error
+            processOnError(new CameraException(CameraException.CAMERA_OPEN_ERROR_UNKNOWN, e));
+            processOnCameraClose();
         }
     }
 
@@ -301,10 +306,6 @@ final class CameraInternal implements ICameraInternal {
                 mUVCCamera = null;
                 closed = true;
             }
-
-            if (closed) {
-                processOnCameraClose();
-            }
         }
 
         if (mImageCapture != null) {
@@ -314,6 +315,13 @@ final class CameraInternal implements ICameraInternal {
         if (mVideoCapture != null) {
             mVideoCapture.release();
             mVideoCapture = null;
+        }
+
+        // Notify callbacks AFTER all resources are fully released,
+        // outside synchronized block to prevent deadlock if callbacks
+        // re-enter CameraInternal methods.
+        if (closed) {
+            processOnCameraClose();
         }
     }
 
@@ -477,12 +485,16 @@ final class CameraInternal implements ICameraInternal {
 
     private void processOnCameraClose() {
         if (DEBUG) Log.d(TAG, "processOnCameraClose:");
-        for (StateCallback callback : mCallbacks) {
-            try {
-                callback.onCameraClose();
-            } catch (Exception e) {
-                e.printStackTrace();
+        try {
+            for (StateCallback callback : mCallbacks) {
+                try {
+                    callback.onCameraClose();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
             }
+        } catch (final Exception e) {
+            Log.w(TAG, e);
         }
     }
 

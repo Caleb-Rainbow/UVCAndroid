@@ -4,11 +4,11 @@ public class CameraException extends Exception {
     /**
      * Unknown error occurred  when open camera
      */
-    public static int CAMERA_OPEN_ERROR_UNKNOWN = 1;
+    public static final int CAMERA_OPEN_ERROR_UNKNOWN = 1;
     /**
      * The device is occupied when open camera.
      */
-    public static int CAMERA_OPEN_ERROR_BUSY = 2;
+    public static final int CAMERA_OPEN_ERROR_BUSY = 2;
 
     /**
      * Error code

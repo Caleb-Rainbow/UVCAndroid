@@ -112,9 +112,6 @@ public class ImageSaver2 implements Runnable {
             if (bmp != null) {
                 bmp.recycle();
             }
-            if (image != null) {
-                image.recycle();
-            }
         }
         return null;
     }

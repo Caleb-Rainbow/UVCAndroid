@@ -149,9 +149,13 @@ class CameraConnectionService {
                         if (!cameraKey.equals(mLastCameraKey)) {
                             Log.i(TAG, "wait for service is ready");
                             try {
-                                mConnectionSync.wait();
+                                while ((cameraInternal = mCameras.get(cameraKey)) == null
+                                        && !cameraKey.equals(mLastCameraKey)) {
+                                    mConnectionSync.wait();
+                                }
                             } catch (InterruptedException e) {
-                                e.printStackTrace();
+                                Log.w(TAG, "getCamera: wait interrupted", e);
+                                Thread.currentThread().interrupt();
                             }
                         }
                     }

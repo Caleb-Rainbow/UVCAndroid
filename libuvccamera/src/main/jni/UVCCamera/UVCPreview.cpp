@@ -481,7 +481,7 @@ uvc_frame_t *UVCPreview::waitPreviewFrame() {
     uvc_frame_t *frame = NULL;
     pthread_mutex_lock(&preview_mutex);
     {
-        if (!previewFrames.size()) {
+        while (!previewFrames.size() && isRunning()) {
             pthread_cond_wait(&preview_sync, &preview_mutex);
         }
         if (LIKELY(isRunning() && previewFrames.size() > 0)) {
@@ -773,7 +773,7 @@ uvc_frame_t *UVCPreview::waitCaptureFrame() {
     uvc_frame_t *frame = NULL;
     pthread_mutex_lock(&capture_mutex);
     {
-        if (!captureQueu) {
+        while (!captureQueu && isRunning()) {
             pthread_cond_wait(&capture_sync, &capture_mutex);
         }
         if (LIKELY(isRunning() && captureQueu)) {
@@ -892,11 +892,25 @@ void UVCPreview::do_capture_callback(JNIEnv *env, uvc_frame_t *frame) {
 
     if (LIKELY(frame)) {
         uvc_frame_t *callback_frame = frame;
-        if (mFrameCallbackObj && iframecallback_fields.onFrame) {
-            if (mFrameCallbackFunc) {
-                callback_frame = get_frame(callbackPixelBytes);
+        // Snapshot shared state under lock to avoid data race with setFrameCallback
+        convFunc_t localFrameCallbackFunc = NULL;
+        size_t localCallbackPixelBytes = 0;
+        jobject localFrameCallbackObj = NULL;
+        jmethodID localOnFrame = NULL;
+        pthread_mutex_lock(&capture_mutex);
+        {
+            localFrameCallbackObj = mFrameCallbackObj;
+            localOnFrame = iframecallback_fields.onFrame;
+            localFrameCallbackFunc = mFrameCallbackFunc;
+            localCallbackPixelBytes = callbackPixelBytes;
+        }
+        pthread_mutex_unlock(&capture_mutex);
+
+        if (localFrameCallbackObj && localOnFrame) {
+            if (localFrameCallbackFunc) {
+                callback_frame = get_frame(localCallbackPixelBytes);
                 if (LIKELY(callback_frame)) {
-                    int b = mFrameCallbackFunc(frame, callback_frame);
+                    int b = localFrameCallbackFunc(frame, callback_frame);
                     recycle_frame(frame);
                     if (UNLIKELY(b)) {
                         LOGW("failed to convert for callback frame");
@@ -908,8 +922,11 @@ void UVCPreview::do_capture_callback(JNIEnv *env, uvc_frame_t *frame) {
                     goto SKIP;
                 }
             }
-            jobject buf = env->NewDirectByteBuffer(callback_frame->data, callbackPixelBytes);
-            env->CallVoidMethod(mFrameCallbackObj, iframecallback_fields.onFrame, buf);
+            jobject buf = env->NewDirectByteBuffer(callback_frame->data, localCallbackPixelBytes);
+            env->CallVoidMethod(localFrameCallbackObj, localOnFrame, buf);
+            if (env->ExceptionCheck()) {
+                env->ExceptionDescribe();
+            }
             env->ExceptionClear();
             env->DeleteLocalRef(buf);
         }

@@ -21,6 +21,7 @@ UVCStatusCallback::UVCStatusCallback(uvc_device_handle_t *devh)
 UVCStatusCallback::~UVCStatusCallback() {
 
 	ENTER();
+	uvc_set_status_callback(mDeviceHandle, NULL, NULL);
 	pthread_mutex_lock(&status_mutex);
 	{
 		if (mStatusCallbackObj) {
@@ -56,6 +57,7 @@ int UVCStatusCallback::setCallback(JNIEnv *env, jobject status_callback_obj) {
 				} else {
 					LOGW("failed to get object class");
 				}
+				if (env->ExceptionCheck()) { env->ExceptionDescribe(); }
 				env->ExceptionClear();
 				if (!istatuscallback_fields.onStatus) {
 					LOGE("Can't find IStatusCallback#onStatus");
@@ -76,6 +78,7 @@ void UVCStatusCallback::notifyStatusCallback(JNIEnv* env, uvc_status_class statu
 		if (mStatusCallbackObj) {
 			jobject buf = env->NewDirectByteBuffer(data, data_len);
 			env->CallVoidMethod(mStatusCallbackObj, istatuscallback_fields.onStatus, (int)status_class, event, selector, (int)status_attribute, buf);
+			if (env->ExceptionCheck()) { env->ExceptionDescribe(); }
 			env->ExceptionClear();
 			env->DeleteLocalRef(buf);
 		}

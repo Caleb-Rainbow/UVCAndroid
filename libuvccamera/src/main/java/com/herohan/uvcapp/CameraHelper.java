@@ -46,6 +46,8 @@ public class CameraHelper implements ICameraHelper {
     private UsbDevice mUsbDevice;
     private final WeakHashMap<UsbDevice, Object> mDetachedDeviceMap = new WeakHashMap<>();
 
+    private volatile boolean mIsReleased = false;
+
     private CameraPreviewConfig mCameraPreviewConfig = new CameraPreviewConfig();
     private ImageCaptureConfig mImageCaptureConfig = new ImageCaptureConfig();
     private VideoCaptureConfig mVideoCaptureConfig = new VideoCaptureConfig();
@@ -64,6 +66,7 @@ public class CameraHelper implements ICameraHelper {
 
     @Override
     public void setStateCallback(StateCallback callback) {
+        if (mIsReleased) return;
         if (callback != null) {
             mCallbackWrapper = new StateCallbackWrapper(callback);
             registerCallback();
@@ -75,6 +78,7 @@ public class CameraHelper implements ICameraHelper {
 
     @Override
     public List<UsbDevice> getDeviceList() {
+        if (mIsReleased) return null;
         if (DEBUG) Log.d(TAG, "getDeviceList:");
         if (mService != null) {
             try {
@@ -87,11 +91,14 @@ public class CameraHelper implements ICameraHelper {
     }
 
     private boolean isDetached(UsbDevice usbDevice) {
-        return mDetachedDeviceMap.containsKey(usbDevice);
+        synchronized (mDetachedDeviceMap) {
+            return mDetachedDeviceMap.containsKey(usbDevice);
+        }
     }
 
     @Override
     public void selectDevice(final UsbDevice device) {
+        if (mIsReleased) return;
         if (DEBUG)
             Log.d(TAG, "selectDevice:device=" + (device != null ? device.getDeviceName() : null) + " " + this);
         mAsyncHandler.post(() -> {
@@ -108,6 +115,7 @@ public class CameraHelper implements ICameraHelper {
 
     @Override
     public List<Format> getSupportedFormatList() {
+        if (mIsReleased) return null;
         if (DEBUG) Log.d(TAG, "getSupportedFormatList:");
         if (mService != null && mUsbDevice != null) {
             try {
@@ -121,6 +129,7 @@ public class CameraHelper implements ICameraHelper {
 
     @Override
     public List<Size> getSupportedSizeList() {
+        if (mIsReleased) return null;
         if (DEBUG) Log.d(TAG, "getSupportedSizeList:");
         if (mService != null && mUsbDevice != null) {
             try {
@@ -134,6 +143,7 @@ public class CameraHelper implements ICameraHelper {
 
     @Override
     public Size getPreviewSize() {
+        if (mIsReleased) return null;
         if (DEBUG) Log.d(TAG, "getPreviewSize:");
         if (mService != null && mUsbDevice != null) {
             try {
@@ -147,6 +157,7 @@ public class CameraHelper implements ICameraHelper {
 
     @Override
     public void setPreviewSize(final Size size) {
+        if (mIsReleased) return;
         if (DEBUG) Log.d(TAG, "setPreviewSize:" + size);
         mAsyncHandler.post(() -> {
             if (mService != null && mUsbDevice != null) {
@@ -185,6 +196,7 @@ public class CameraHelper implements ICameraHelper {
 
     @Override
     public void addSurface(final Object surface, final boolean isRecordable) {
+        if (mIsReleased) return;
         if (DEBUG) Log.d(TAG, "addSurface:surface=" + surface + ",isRecordable=" + isRecordable);
         mAsyncHandler.post(() -> {
             Object sur = fetchSurface(surface);
@@ -202,6 +214,7 @@ public class CameraHelper implements ICameraHelper {
 
     @Override
     public void removeSurface(final Object surface) {
+        if (mIsReleased) return;
         if (DEBUG) Log.d(TAG, "removeSurface:surface=" + surface);
         mAsyncHandler.post(() -> {
             Object sur = fetchSurface(surface);
@@ -219,6 +232,7 @@ public class CameraHelper implements ICameraHelper {
 
     @Override
     public void setButtonCallback(IButtonCallback callback) {
+        if (mIsReleased) return;
         if (DEBUG) Log.d(TAG, "setButtonCallback:" + callback);
         mAsyncHandler.post(() -> {
             if (mService != null && mUsbDevice != null) {
@@ -233,6 +247,7 @@ public class CameraHelper implements ICameraHelper {
 
     @Override
     public void setFrameCallback(IFrameCallback callback, int pixelFormat) {
+        if (mIsReleased) return;
         if (DEBUG) Log.d(TAG, "setFrameCallback:" + pixelFormat);
         mAsyncHandler.post(() -> {
             if (mService != null && mUsbDevice != null) {
@@ -247,16 +262,19 @@ public class CameraHelper implements ICameraHelper {
 
     @Override
     public void openCamera() {
+        if (mIsReleased) return;
         openCamera(new UVCParam(null, UVCCamera.getRecommendedPlatformQuirks()));
     }
 
     @Override
     public void openCamera(Size size) {
+        if (mIsReleased) return;
         openCamera(new UVCParam(size, UVCCamera.getRecommendedPlatformQuirks()));
     }
 
     @Override
     public void openCamera(UVCParam param) {
+        if (mIsReleased) return;
         if (DEBUG) Log.d(TAG, "openCamera: " + this);
         mAsyncHandler.post(() -> {
             if (mService != null && mUsbDevice != null && !isDetached(mUsbDevice)) {
@@ -278,6 +296,7 @@ public class CameraHelper implements ICameraHelper {
 
     @Override
     public void closeCamera() {
+        if (mIsReleased) return;
         if (DEBUG) Log.d(TAG, "closeCamera: " + this);
         mAsyncHandler.post(() -> {
             if (mService != null && mUsbDevice != null) {
@@ -296,6 +315,7 @@ public class CameraHelper implements ICameraHelper {
 
     @Override
     public void startPreview() {
+        if (mIsReleased) return;
         if (DEBUG) Log.d(TAG, "startPreview: " + this);
         mAsyncHandler.post(() -> {
             if (mService != null && mUsbDevice != null) {
@@ -316,6 +336,7 @@ public class CameraHelper implements ICameraHelper {
 
     @Override
     public void stopPreview() {
+        if (mIsReleased) return;
         if (DEBUG) Log.d(TAG, "stopPreview: " + this);
         mAsyncHandler.post(() -> {
             if (mService != null && mUsbDevice != null) {
@@ -330,6 +351,7 @@ public class CameraHelper implements ICameraHelper {
 
     @Override
     public UVCControl getUVCControl() {
+        if (mIsReleased) return null;
         if (DEBUG) Log.d(TAG, "getUVCControl:");
         if (mService != null && mUsbDevice != null) {
             try {
@@ -343,6 +365,7 @@ public class CameraHelper implements ICameraHelper {
 
     @Override
     public void takePicture(ImageCapture.OutputFileOptions options, ImageCapture.OnImageCaptureCallback callback) {
+        if (mIsReleased) return;
         if (DEBUG) Log.d(TAG, "takePicture");
         mAsyncHandler.post(() -> {
             if (mService != null && mUsbDevice != null) {
@@ -365,6 +388,7 @@ public class CameraHelper implements ICameraHelper {
 
     @Override
     public boolean isRecording() {
+        if (mIsReleased) return false;
         if (DEBUG) Log.d(TAG, "isRecording:");
         if (mService != null && mUsbDevice != null) {
             try {
@@ -378,6 +402,7 @@ public class CameraHelper implements ICameraHelper {
 
     @Override
     public void startRecording(VideoCapture.OutputFileOptions options, VideoCapture.OnVideoCaptureCallback callback) {
+        if (mIsReleased) return;
         if (DEBUG) Log.d(TAG, "startRecording");
         mAsyncHandler.post(() -> {
             if (mService != null && mUsbDevice != null) {
@@ -392,6 +417,7 @@ public class CameraHelper implements ICameraHelper {
 
     @Override
     public void stopRecording() {
+        if (mIsReleased) return;
         if (DEBUG) Log.d(TAG, "stopRecording:");
         mAsyncHandler.post(() -> {
             if (isRecording()) {
@@ -408,6 +434,7 @@ public class CameraHelper implements ICameraHelper {
 
     @Override
     public boolean isCameraOpened() {
+        if (mIsReleased) return false;
         if (DEBUG) Log.d(TAG, "isCameraOpened:");
         if (mService != null && mUsbDevice != null) {
             try {
@@ -422,8 +449,8 @@ public class CameraHelper implements ICameraHelper {
     @Override
     public void release() {
         if (DEBUG) Log.d(TAG, "release: " + this);
+        mIsReleased = true;
         mAsyncHandler.post(() -> {
-            if (mService != null) {
                 try {
                     if (mUsbDevice != null) {
                         mService.releaseCamera(mUsbDevice);
@@ -435,18 +462,17 @@ public class CameraHelper implements ICameraHelper {
 
                 mCallbackWrapper = null;
                 mService = null;
-            }
-
-            mUsbDevice = null;
-//            Watchdog.getInstance().removeThread(mAsyncHandler);
-            mAsyncHandlerThread.quitSafely();
-            mDetachedDeviceMap.clear();
+                mUsbDevice = null;
+//              Watchdog.getInstance().removeThread(mAsyncHandler);
+                mAsyncHandlerThread.quitSafely();
+                mDetachedDeviceMap.clear();
         });
     }
 
     @Override
     public void releaseAll() {
         if (DEBUG) Log.d(TAG, "releaseAll: " + this);
+        mIsReleased = true;
         mAsyncHandler.post(() -> {
             if (mService != null) {
                 try {
@@ -474,6 +500,7 @@ public class CameraHelper implements ICameraHelper {
      */
     @Override
     public CameraPreviewConfig getPreviewConfig() {
+        if (mIsReleased) return mCameraPreviewConfig;
         return mCameraPreviewConfig;
     }
 
@@ -484,6 +511,7 @@ public class CameraHelper implements ICameraHelper {
      */
     @Override
     public void setPreviewConfig(CameraPreviewConfig config) {
+        if (mIsReleased) return;
         if (DEBUG) Log.d(TAG, "setCameraPreviewConfig:");
         mCameraPreviewConfig = config;
         mAsyncHandler.post(() -> {
@@ -506,6 +534,7 @@ public class CameraHelper implements ICameraHelper {
      */
     @Override
     public ImageCaptureConfig getImageCaptureConfig() {
+        if (mIsReleased) return mImageCaptureConfig;
         return mImageCaptureConfig;
     }
 
@@ -516,6 +545,7 @@ public class CameraHelper implements ICameraHelper {
      */
     @Override
     public void setImageCaptureConfig(ImageCaptureConfig config) {
+        if (mIsReleased) return;
         if (DEBUG) Log.d(TAG, "setImageCaptureConfig:");
         mImageCaptureConfig = config;
         mAsyncHandler.post(() -> {
@@ -538,6 +568,7 @@ public class CameraHelper implements ICameraHelper {
      */
     @Override
     public VideoCaptureConfig getVideoCaptureConfig() {
+        if (mIsReleased) return mVideoCaptureConfig;
         return mVideoCaptureConfig;
     }
 
@@ -548,6 +579,7 @@ public class CameraHelper implements ICameraHelper {
      */
     @Override
     public void setVideoCaptureConfig(VideoCaptureConfig config) {
+        if (mIsReleased) return;
         if (DEBUG) Log.d(TAG, "setVideoCaptureConfig:");
         mVideoCaptureConfig = config;
         mAsyncHandler.post(() -> {
