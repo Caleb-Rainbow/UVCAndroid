@@ -43,9 +43,6 @@ extensions.configure<ApplicationExtension>("android") {
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.fromTarget("21"))
-        freeCompilerArgs.addAll(
-            "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api"
-        )
     }
 }
 

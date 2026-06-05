@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.ActivityInfo
 import android.hardware.usb.UsbDevice
 import android.os.Bundle
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -52,8 +53,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.hjq.permissions.XXPermissions
+import com.hjq.permissions.permission.PermissionLists
 import com.herohan.uvcapp.R
 import com.herohan.uvcapp.ui.theme.UVCAndroidTheme
 import com.herohan.uvcapp.utils.identityKey
@@ -62,6 +66,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_SECURE
+        )
         enableEdgeToEdge()
 
         setContent {
@@ -79,6 +87,8 @@ private fun MainScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var isLandscape by rememberSaveable { mutableStateOf(false) }
+
+    val safeToast = rememberSafeToastTrigger()
 
     val toggleLandscape: () -> Unit = {
         (context as? ComponentActivity)?.let { activity ->
@@ -107,7 +117,7 @@ private fun MainScreen(
     // Global toast handling
     LaunchedEffect(uiState.globalToastMessage) {
         uiState.globalToastMessage?.let { msg ->
-            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+            safeToast(msg)
             viewModel.clearGlobalToast()
         }
     }
@@ -117,7 +127,7 @@ private fun MainScreen(
         key(slotId) {
             LaunchedEffect(slotId, slotState.toastMessage) {
                 slotState.toastMessage?.let { msg ->
-                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    safeToast(msg)
                     viewModel.clearSlotToast(slotId)
                 }
             }
@@ -174,15 +184,17 @@ private fun MainScreen(
                 uiState.slots.size == 1 -> {
                     // Single camera — full screen
                     val (slotId, slotState) = uiState.slots.entries.first()
+                    val singleController = viewModel.getSlotController(slotId) ?: return@Box
                     CameraSlotComposable(
                         state = slotState,
-                        controller = viewModel.getSlotController(slotId) ?: return@Box,
+                        controller = singleController,
                         allDevices = uiState.allDevices,
                         isMultiSlot = false,
                         onEnqueueDevice = { id, device ->
                             viewModel.enqueueDeviceSelection(id, device)
                         },
                         onRemoveSlot = { viewModel.removeSlot(slotId) },
+                        onRequestRecord = rememberSafeRecordRequest(singleController, context),
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -194,6 +206,7 @@ private fun MainScreen(
                         allDevices = uiState.allDevices,
                         viewModel = viewModel,
                         isLandscape = isLandscape,
+                        context = context,
                     )
                 }
             }
@@ -225,6 +238,7 @@ private fun MultiCameraGrid(
     allDevices: List<UsbDevice>,
     viewModel: MultiCameraViewModel,
     isLandscape: Boolean,
+    context: android.content.Context,
 ) {
     val columns = if (isLandscape) {
         if (slots.size <= 2) 2 else 3
@@ -240,15 +254,17 @@ private fun MultiCameraGrid(
             items = slots.entries.toList(),
             key = { it.key },
         ) { (slotId, slotState) ->
+            val gridController = viewModel.getSlotController(slotId) ?: return@items
             CameraSlotComposable(
                 state = slotState,
-                controller = viewModel.getSlotController(slotId) ?: return@items,
+                controller = gridController,
                 allDevices = allDevices,
                 isMultiSlot = true,
                 onEnqueueDevice = { id, device ->
                     viewModel.enqueueDeviceSelection(id, device)
                 },
                 onRemoveSlot = { viewModel.removeSlot(slotId) },
+                onRequestRecord = rememberSafeRecordRequest(gridController, context),
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(
@@ -296,4 +312,36 @@ private fun MainTopAppBar(
             }
         },
     )
+}
+
+@Composable
+private fun rememberSafeToastTrigger(): (String) -> Unit {
+    val context = LocalContext.current
+    val lifecycle = (context as? ComponentActivity)?.lifecycle
+    return remember {
+        { msg: String ->
+            if (lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) == true) {
+                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+}
+
+@Composable
+private fun rememberSafeRecordRequest(
+    controller: CameraSlotController,
+    context: android.content.Context,
+): () -> Unit = remember(controller, context) {
+    {
+        val activity = context as? ComponentActivity ?: return@remember
+        XXPermissions.with(activity)
+            .permission(PermissionLists.getRecordAudioPermission())
+            .request { _, allGranted ->
+                if (allGranted) {
+                    controller.toggleVideoRecord()
+                } else {
+                    Toast.makeText(activity, activity.getString(R.string.slot_audio_permission_required), Toast.LENGTH_SHORT).show()
+                }
+            }
+    }
 }

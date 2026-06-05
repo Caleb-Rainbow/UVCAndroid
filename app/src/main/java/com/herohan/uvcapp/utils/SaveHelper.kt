@@ -2,6 +2,7 @@ package com.herohan.uvcapp.utils
 
 import android.content.Context
 import android.os.Environment
+import android.util.Log
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -40,6 +41,7 @@ object SaveHelper {
             ?: File(context.filesDir, "USBCamera")
         val dir = File(File(baseDir, "USBCamera"), "$dateFolder/$subDir")
         if (!dir.exists() && !dir.mkdirs()) {
+            Log.w("SaveHelper", "Failed to create directory: ${dir.absolutePath}")
             // Fallback to internal storage if external storage is unavailable
             val fallback = File(context.filesDir, "USBCamera/$dateFolder/$subDir")
             fallback.mkdirs()

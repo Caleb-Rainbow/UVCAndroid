@@ -32,7 +32,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -40,9 +39,6 @@ import androidx.compose.ui.unit.dp
 import com.herohan.uvcapp.R
 import com.herohan.uvcapp.utils.identityKey
 import com.herohan.uvcapp.utils.TimeFormatter
-import android.widget.Toast
-import com.hjq.permissions.XXPermissions
-import com.hjq.permissions.permission.PermissionLists
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.collectAsState
 
@@ -54,10 +50,9 @@ fun CameraSlotComposable(
     isMultiSlot: Boolean,
     onEnqueueDevice: (String, UsbDevice) -> Unit,
     onRemoveSlot: () -> Unit = {},
+    onRequestRecord: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
-
     // Read recording time from dedicated flow — bypasses syncSlotStates for performance
     val recordTime by controller.recordTimeMillis.collectAsState()
 
@@ -145,24 +140,17 @@ fun CameraSlotComposable(
             }
 
             // FAB column
+            val onPhotoClick = remember(controller) {
+                { controller.takePicture() }
+            }
+
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(if (isMultiSlot) 4.dp else 16.dp),
             ) {
                 FloatingActionButton(
-                    onClick = {
-                        val activity = context as? android.app.Activity ?: return@FloatingActionButton
-                        XXPermissions.with(activity)
-                            .permission(PermissionLists.getRecordAudioPermission())
-                            .request { _, allGranted ->
-                                if (allGranted) {
-                                    controller.toggleVideoRecord()
-                                } else {
-                                    Toast.makeText(activity, activity.getString(R.string.slot_audio_permission_required), Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                    },
+                    onClick = onRequestRecord,
                     containerColor = if (state.isRecording) Color.Red
                     else MaterialTheme.colorScheme.primaryContainer,
                 ) {
@@ -177,9 +165,7 @@ fun CameraSlotComposable(
                 Spacer(modifier = Modifier.height(if (isMultiSlot) 4.dp else 12.dp))
 
                 FloatingActionButton(
-                    onClick = {
-                        controller.takePicture()
-                    },
+                    onClick = onPhotoClick,
                 ) {
                     Icon(
                         imageVector = Icons.Default.CameraAlt,

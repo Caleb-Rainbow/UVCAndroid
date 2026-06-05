@@ -8,6 +8,7 @@ import com.herohan.uvcapp.CameraHelper
 import com.herohan.uvcapp.R
 import com.herohan.uvcapp.ICameraHelper
 import com.herohan.uvcapp.utils.identityKey
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,6 +23,7 @@ import java.util.LinkedHashMap
 
 data class MultiCameraUiState(
     val hasCameraPermission: Boolean = false,
+    /** Slot states keyed by slot ID. Insertion order preserved (LinkedHashMap via syncSlotStates). */
     val slots: Map<String, CameraSlotState> = emptyMap(),
     val allDevices: List<UsbDevice> = emptyList(),
     val globalToastMessage: String? = null,
@@ -96,7 +98,7 @@ class MultiCameraViewModel(application: Application) : AndroidViewModel(applicat
         val slotIndex = _nextSlotIndex + 1
         _nextSlotIndex++
 
-        val controller = CameraSlotController(slotId, slotIndex, getApplication<Application>())
+        val controller = CameraSlotController(slotId, slotIndex, getApplication<Application>(), viewModelScope)
         controller.onStateChanged = {
             syncSlotStates()
         }
@@ -120,7 +122,7 @@ class MultiCameraViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun refreshAllDevices() {
-        val devices = _scannerHelper?.deviceList ?: emptyList()
+        val devices = _scannerHelper?.deviceList?.toList() ?: emptyList()
         _uiState.update { it.copy(allDevices = devices) }
     }
 
@@ -172,54 +174,59 @@ class MultiCameraViewModel(application: Application) : AndroidViewModel(applicat
         }
 
         viewModelScope.launch {
-            // Phase A: Validate and eject under lock
-            val controller = _deviceMutex.withLock {
-                val ctrl = _slots[slotId] ?: return@launch
+            try {
+                // Phase A: Validate and eject under lock
+                val controller = _deviceMutex.withLock {
+                    val ctrl = _slots[slotId] ?: return@launch
 
-                // Check device is not bound to another slot
-                val conflictSlot = _slots.entries.find { entry ->
-                    entry.key != slotId &&
-                        entry.value.state.value.boundDeviceKey == device.identityKey()
-                }
-                if (conflictSlot != null) {
-                    _uiState.update {
-                        it.copy(globalToastMessage = getApplication<Application>().getString(R.string.global_device_in_use))
+                    // Check device is not bound to another slot
+                    val conflictSlot = _slots.entries.find { entry ->
+                        entry.key != slotId &&
+                            entry.value.state.value.boundDeviceKey == device.identityKey()
                     }
-                    return@launch
+                    if (conflictSlot != null) {
+                        _uiState.update {
+                            it.copy(globalToastMessage = getApplication<Application>().getString(R.string.global_device_in_use))
+                        }
+                        return@launch
+                    }
+
+                    // Eject current camera if connected
+                    if (ctrl.state.value.isCameraConnected) {
+                        ctrl.safelyEject()
+                    }
+                    ctrl
+                }
+                // Lock released — other slot operations can proceed during the wait
+
+                // Phase B: Wait for disconnect (unlocked)
+                if (controller.state.value.isCameraConnected) {
+                    withTimeoutOrNull(5000L) {
+                        controller.state
+                            .map { it.isCameraConnected }
+                            .first { !it }
+                    }
                 }
 
-                // Eject current camera if connected
-                if (ctrl.state.value.isCameraConnected) {
-                    ctrl.safelyEject()
-                }
-                ctrl
-            }
-            // Lock released — other slot operations can proceed during the wait
+                // Phase C: Revalidate and select under lock
+                _deviceMutex.withLock {
+                    // Re-validate after wait: slot may have been removed by onDetach
+                    if (!_slots.containsKey(slotId)) return@launch
 
-            // Phase B: Wait for disconnect (unlocked)
-            if (controller.state.value.isCameraConnected) {
+                    controller.selectDevice(device)
+                }
+
+                // Wait for the camera to open or fail (reactive, not fixed delay)
                 withTimeoutOrNull(5000L) {
-                    controller.state
-                        .map { it.isCameraConnected }
-                        .first { !it }
+                    controller.state.map { it.isCameraConnected }.first { it }
                 }
-                kotlinx.coroutines.delay(300)
-            }
 
-            // Phase C: Revalidate and select under lock
-            _deviceMutex.withLock {
-                // Re-validate after wait: slot may have been removed by onDetach
-                if (!_slots.containsKey(slotId)) return@launch
-
-                controller.selectDevice(device)
-            }
-
-            // Wait for the camera to open or fail (outside lock)
-            kotlinx.coroutines.delay(500)
-
-            // Final check: slot may have been removed during the delay
-            if (_slots.containsKey(slotId)) {
-                refreshAllDevices()
+                // Final check: slot may have been removed during the wait
+                if (_slots.containsKey(slotId)) {
+                    refreshAllDevices()
+                }
+            } catch (e: CancellationException) {
+                throw e
             }
         }
     }

@@ -137,10 +137,12 @@ fun VideoFormatDialog(
                     onClick = {
                         val parts = selectedResolution.split("x")
                         if (parts.size == 2) {
+                            val width = parts[0].toIntOrNull()?.coerceIn(64, 7680) ?: 640
+                            val height = parts[1].toIntOrNull()?.coerceIn(64, 4320) ?: 480
                             val size = Size(
                                 selectedType,
-                                parts[0].toIntOrNull() ?: 640,
-                                parts[1].toIntOrNull() ?: 480,
+                                width,
+                                height,
                                 selectedFps,
                                 ArrayList(fpsList),
                             )
@@ -156,6 +158,7 @@ fun VideoFormatDialog(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FormatDropdown(
     label: String,

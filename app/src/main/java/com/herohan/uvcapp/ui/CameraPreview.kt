@@ -6,7 +6,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.viewinterop.AndroidView
@@ -24,17 +28,10 @@ fun CameraPreview(
 ) {
     val aspectRatio = if (previewHeight > 0) previewWidth.toFloat() / previewHeight.toFloat() else 1f
 
-    val callbacks = remember(onFirstFrame) {
-        object {
-            var onAdd: ((SurfaceTexture) -> Unit)? = null
-            var onRemove: ((SurfaceTexture) -> Unit)? = null
-            var onFrame: (() -> Unit)? = null
-            var firstFrameReceived = false
-        }
-    }
-    callbacks.onAdd = onAddSurface
-    callbacks.onRemove = onRemoveSurface
-    callbacks.onFrame = onFirstFrame
+    val currentOnAdd by rememberUpdatedState(onAddSurface)
+    val currentOnRemove by rememberUpdatedState(onRemoveSurface)
+    val currentOnFrame by rememberUpdatedState(onFirstFrame)
+    var firstFrameReceived by remember { mutableStateOf(false) }
 
     AndroidView(
         factory = { ctx ->
@@ -44,7 +41,7 @@ fun CameraPreview(
                     override fun onSurfaceTextureAvailable(
                         surface: SurfaceTexture, width: Int, height: Int
                     ) {
-                        callbacks.onAdd?.invoke(surface)
+                        currentOnAdd(surface)
                     }
 
                     override fun onSurfaceTextureSizeChanged(
@@ -52,14 +49,14 @@ fun CameraPreview(
                     ) {}
 
                     override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
-                        callbacks.onRemove?.invoke(surface)
+                        currentOnRemove(surface)
                         return false
                     }
 
                     override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
-                        if (!callbacks.firstFrameReceived) {
-                            callbacks.firstFrameReceived = true
-                            callbacks.onFrame?.invoke()
+                        if (!firstFrameReceived) {
+                            firstFrameReceived = true
+                            currentOnFrame?.invoke()
                         }
                     }
                 }

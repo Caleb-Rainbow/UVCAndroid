@@ -2,8 +2,8 @@ package com.herohan.uvcapp.ui
 
 import android.content.Context
 import android.hardware.usb.UsbDevice
-import android.os.Handler
-import android.os.Looper
+import android.util.Log
+import androidx.compose.runtime.Stable
 import com.herohan.uvcapp.CameraException
 import com.herohan.uvcapp.CameraHelper
 import com.herohan.uvcapp.ICameraHelper
@@ -13,21 +13,28 @@ import com.herohan.uvcapp.utils.SaveHelper
 import com.serenegiant.opengl.renderer.MirrorMode
 import com.serenegiant.usb.Size
 import com.serenegiant.usb.UVCControl
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import com.herohan.uvcapp.R
 import com.herohan.uvcapp.utils.identityKey
 import java.io.File
 import java.io.IOException
 
+@Stable
 class CameraSlotController(
     val slotId: String,
     val slotIndex: Int,
     private val appContext: Context,
+    private val scope: CoroutineScope,
 ) {
 
     companion object {
+        private const val TAG = "CameraSlotController"
         /** ~6.25 Mbps */
         private const val VIDEO_BITRATE_BPS = (1024 * 1024 * 25 / 4)
         /** Timeout to detect silent preview failure */
@@ -42,9 +49,8 @@ class CameraSlotController(
     val recordTimeMillis = _recordTimeMillis.asStateFlow()
 
     private var _cameraHelper: ICameraHelper? = null
-    private val mainHandler = Handler(Looper.getMainLooper())
-    @Volatile private var _previewStarted = false
-    private var _previewCheckRunnable: Runnable? = null
+    private var _previewStarted = false
+    private var previewCheckJob: Job? = null
     @Volatile private var isReleased = false
 
     /** Called on the main thread whenever this slot's state changes. */
@@ -58,8 +64,9 @@ class CameraSlotController(
     }
 
     private fun notifyStateChanged() {
-        if (!isReleased) {
-            onStateChanged?.invoke()
+        val callback = onStateChanged
+        if (!isReleased && callback != null) {
+            callback()
         }
     }
 
@@ -102,8 +109,8 @@ class CameraSlotController(
                 _cameraHelper?.startPreview()
                 // Start timeout to detect silent preview failure (USB bandwidth exhaustion)
                 _previewStarted = false
-                val checkRunnable = Runnable {
-                    if (isReleased) return@Runnable
+                previewCheckJob = scope.launch {
+                    delay(PREVIEW_CHECK_TIMEOUT_MS)
                     if (!_previewStarted && _state.value.isCameraConnected) {
                         _cameraHelper?.closeCamera()
                         _state.update {
@@ -114,15 +121,13 @@ class CameraSlotController(
                         }
                         notifyStateChanged()
                         // Delay removal so toast can be shown
-                        mainHandler.postDelayed({
-                            if (!isReleased) {
-                                onRemoveRequested?.invoke()
-                            }
-                        }, 100)
+                        delay(100)
+                        if (!isReleased) {
+                            val removeCallback = onRemoveRequested
+                            removeCallback?.invoke()
+                        }
                     }
                 }
-                _previewCheckRunnable = checkRunnable
-                mainHandler.postDelayed(checkRunnable, PREVIEW_CHECK_TIMEOUT_MS)
 
                 val size = _cameraHelper?.previewSize
                 if (size != null) {
@@ -137,7 +142,7 @@ class CameraSlotController(
                 _state.update {
                     it.copy(
                         isCameraConnected = true,
-                        supportedFormats = _cameraHelper?.supportedFormatList ?: emptyList(),
+                        supportedFormats = _cameraHelper?.supportedFormatList?.toList() ?: emptyList(),
                         boundDeviceKey = device.identityKey(),
                     )
                 }
@@ -173,7 +178,12 @@ class CameraSlotController(
 
             override fun onCancel(device: UsbDevice) {
                 if (isReleased) return
-                _state.update { it.copy(boundDeviceKey = null) }
+                _state.update {
+                    it.copy(
+                        boundDeviceKey = null,
+                        toastMessage = appContext.getString(R.string.slot_permission_denied)
+                    )
+                }
                 notifyStateChanged()
             }
 
@@ -309,6 +319,7 @@ class CameraSlotController(
 
             override fun onError(videoCaptureError: Int, message: String, cause: Throwable?) {
                 if (isReleased) return
+                Log.w(TAG, "Recording error: code=$videoCaptureError msg=$message", cause)
                 _recordTimeMillis.value = 0L
                 _state.update { it.copy(isRecording = false) }
                 _state.update {
@@ -412,18 +423,18 @@ class CameraSlotController(
     /** Called when the first preview frame is rendered — confirms preview is working. */
     fun confirmPreviewStarted() {
         _previewStarted = true
-        _previewCheckRunnable?.let { mainHandler.removeCallbacks(it) }
-        _previewCheckRunnable = null
+        previewCheckJob?.cancel()
+        previewCheckJob = null
     }
 
     fun release() {
         if (isReleased) return
         isReleased = true
         _recordTimeMillis.value = 0L
+        previewCheckJob?.cancel()
+        previewCheckJob = null
         onStateChanged = null
         onRemoveRequested = null
-        _previewCheckRunnable?.let { mainHandler.removeCallbacks(it) }
-        _previewCheckRunnable = null
         _cameraHelper?.release()
         _cameraHelper = null
     }
