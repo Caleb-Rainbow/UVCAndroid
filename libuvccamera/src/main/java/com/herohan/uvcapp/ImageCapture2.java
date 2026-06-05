@@ -238,8 +238,21 @@ public class ImageCapture2 implements IImageCapture {
 
     @Override
     public void release() {
+        if (mImageReader != null) {
+            mImageReader.setOnImageAvailableListener(null, null);
+            mImageReader.close();
+            mImageReader = null;
+        }
         if (mExecutor != null) {
             mExecutor.shutdown();
+            try {
+                if (!mExecutor.awaitTermination(3, java.util.concurrent.TimeUnit.SECONDS)) {
+                    mExecutor.shutdownNow();
+                }
+            } catch (final InterruptedException e) {
+                mExecutor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
             mExecutor = null;
         }
     }

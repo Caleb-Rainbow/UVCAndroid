@@ -20,8 +20,8 @@ import com.serenegiant.uvccamera.BuildConfig;
 import com.serenegiant.uvccamera.R;
 
 import java.lang.ref.WeakReference;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 final class CameraInternal implements ICameraInternal {
     private static final boolean DEBUG = BuildConfig.DEBUG;
@@ -49,7 +49,7 @@ final class CameraInternal implements ICameraInternal {
      */
     private volatile UVCCamera mUVCCamera;
 
-    private final List<StateCallback> mCallbacks = new ArrayList<>();
+    private final List<StateCallback> mCallbacks = new CopyOnWriteArrayList<>();
 
     private IImageCapture mImageCapture;
     private VideoCapture mVideoCapture;

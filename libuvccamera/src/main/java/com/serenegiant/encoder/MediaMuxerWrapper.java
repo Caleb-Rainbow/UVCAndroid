@@ -32,6 +32,7 @@ import android.media.MediaFormat;
 import android.media.MediaMuxer;
 import android.net.Uri;
 import android.os.Build;
+import android.os.ParcelFileDescriptor;
 import android.util.Log;
 
 import com.serenegiant.utils.UVCUtils;
@@ -50,6 +51,12 @@ public class MediaMuxerWrapper {
     private MediaEncoder mVideoEncoder, mAudioEncoder;
 
     /**
+     * On Android Q+, openFileDescriptor returns a ParcelFileDescriptor that
+     * must be closed after the MediaMuxer is done. Stored here and closed in stop().
+     */
+    private ParcelFileDescriptor mPfd;
+
+    /**
      * Constructor
      *
      * @param uri uri of output file
@@ -63,7 +70,8 @@ public class MediaMuxerWrapper {
             String outputPath = UriHelper.getPath(UVCUtils.getApplication(), mOutputUri);
             mMediaMuxer = new MediaMuxer(outputPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
         } else {
-            mMediaMuxer = new MediaMuxer(context.getContentResolver().openFileDescriptor(mOutputUri, "rw").getFileDescriptor(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+            mPfd = context.getContentResolver().openFileDescriptor(mOutputUri, "rw");
+            mMediaMuxer = new MediaMuxer(mPfd.getFileDescriptor(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
         }
 
         mEncoderCount = mStartedCount = 0;
@@ -167,13 +175,21 @@ public class MediaMuxerWrapper {
     synchronized void stop() {
         if (DEBUG) Log.v(TAG, "stop:mStartedCount=" + mStartedCount);
         mStartedCount--;
-        if ((mEncoderCount > 0) && (mStartedCount <= 0)) {
+        if ((mEncoderCount > 0) && (mStartedCount == 0)) {
             try {
                 mMediaMuxer.stop();
             } catch (final Exception e) {
                 Log.e(TAG, " MediaMuxer stop error", e);
             } finally {
                 mMediaMuxer.release();
+                if (mPfd != null) {
+                    try {
+                        mPfd.close();
+                    } catch (final Exception e) {
+                        Log.e(TAG, "ParcelFileDescriptor close error", e);
+                    }
+                    mPfd = null;
+                }
             }
             mIsStarted = false;
             if (DEBUG) Log.v(TAG, "MediaMuxer stopped:");

@@ -21,12 +21,23 @@ UVCStatusCallback::UVCStatusCallback(uvc_device_handle_t *devh)
 UVCStatusCallback::~UVCStatusCallback() {
 
 	ENTER();
+	pthread_mutex_lock(&status_mutex);
+	{
+		if (mStatusCallbackObj) {
+			JNIEnv *env = getEnv();
+			if (env) {
+				env->DeleteGlobalRef(mStatusCallbackObj);
+			}
+			mStatusCallbackObj = NULL;
+		}
+	}
+	pthread_mutex_unlock(&status_mutex);
 	pthread_mutex_destroy(&status_mutex);
 	EXIT();
 }
 
 int UVCStatusCallback::setCallback(JNIEnv *env, jobject status_callback_obj) {
-	
+
 	ENTER();
 	pthread_mutex_lock(&status_mutex);
 	{

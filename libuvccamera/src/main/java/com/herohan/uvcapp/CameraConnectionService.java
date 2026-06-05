@@ -543,6 +543,9 @@ class CameraConnectionService {
 
         @Override
         public void release() {
+            // Release all cameras first to stop USB I/O and native threads
+            releaseAllCamera();
+
             if (mUSBMonitor != null) {
                 mUSBMonitor.destroy();
                 mUSBMonitor = null;

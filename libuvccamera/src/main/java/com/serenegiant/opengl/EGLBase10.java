@@ -292,9 +292,9 @@ import javax.microedition.khronos.egl.EGLSurface;
     @Override
     public void release() {
 //		if (DEBUG) Log.v(TAG, "release:");
+        if (mEgl == null) return;
         destroyContext();
         mContext = EGL_NO_CONTEXT;
-        if (mEgl == null) return;
 //		mEgl.eglReleaseThread();	// XXX これを入れるとハングアップする機種がある
         mEgl.eglTerminate(mEglDisplay);
         mEglDisplay = null;

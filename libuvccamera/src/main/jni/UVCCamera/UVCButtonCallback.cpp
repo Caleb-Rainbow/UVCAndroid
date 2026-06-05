@@ -21,14 +21,24 @@ UVCButtonCallback::UVCButtonCallback(uvc_device_handle_t *devh)
 UVCButtonCallback::~UVCButtonCallback() {
 
 	ENTER();
+	pthread_mutex_lock(&button_mutex);
+	{
+		if (mButtonCallbackObj) {
+			JNIEnv *env = getEnv();
+			if (env) {
+				env->DeleteGlobalRef(mButtonCallbackObj);
+			}
+			mButtonCallbackObj = NULL;
+		}
+	}
+	pthread_mutex_unlock(&button_mutex);
 	pthread_mutex_destroy(&button_mutex);
-	mButtonCallbackObj = NULL;
 	ibuttoncallback_fields.onButton = NULL;
 	EXIT();
 }
 
 int UVCButtonCallback::setCallback(JNIEnv *env, jobject button_callback_obj) {
-	
+
 	ENTER();
 	pthread_mutex_lock(&button_mutex);
 	{

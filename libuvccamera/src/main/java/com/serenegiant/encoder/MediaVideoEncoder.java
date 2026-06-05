@@ -129,10 +129,9 @@ public class MediaVideoEncoder extends MediaEncoder implements IVideoEncoder {
     @Override
     protected void release() {
         if (DEBUG) Log.i(TAG, "release:");
-        if (mSurface != null) {
-            mSurface.release();
-            mSurface = null;
-        }
+        // Release RenderHandler first (it may still reference the encoder Surface).
+        // Do NOT release mSurface here — the parent MediaEncoder.release() releases
+        // the Surface AFTER stopping MediaCodec, which is the correct order per Android spec.
         if (mRenderHandler != null) {
             mRenderHandler.release();
             mRenderHandler = null;

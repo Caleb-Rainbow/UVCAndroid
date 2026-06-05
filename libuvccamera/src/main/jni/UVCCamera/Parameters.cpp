@@ -265,20 +265,29 @@ char *UVCDiags::getDescriptions(const uvc_device_handle_t *deviceHandle) {
 		writer.String(DESCRIPTION);
 		writer.StartObject();
 		{
-			uvc_device_descriptor_t *desc;
-			uvc_get_device_descriptor(deviceHandle->dev, &desc);
-			write(writer, DESC_VENDOR_ID, desc->idVendor);
-			write(writer, DESC_PRODUCT_ID, desc->idProduct);
-			write(writer, DESC_SERIALNUMBER, desc->serialNumber ? desc->serialNumber : "[none]");
-			write(writer, DESC_MANUFACTURE, desc->manufacturer ? desc->manufacturer : "[unknown]");
-//			write(writer, DESC_PRODUCT, desc->product ? desc->product : "UVC Camera");
-			if (desc->product)
-				write(writer, DESC_PRODUCT, desc->product);
-			else {
-				sprintf(work, "UVC Camera (%x:%x)", desc->idVendor, desc->idProduct);
-				write(writer, DESC_PRODUCT, work);
+			uvc_device_descriptor_t *desc = NULL;
+			uvc_error_t ret = uvc_get_device_descriptor(deviceHandle->dev, &desc);
+			if (UNLIKELY(ret != UVC_SUCCESS) || (desc == NULL)) {
+				LOGE("uvc_get_device_descriptor failed: %d", ret);
+				write(writer, DESC_VENDOR_ID, 0);
+				write(writer, DESC_PRODUCT_ID, 0);
+				write(writer, DESC_SERIALNUMBER, "[none]");
+				write(writer, DESC_MANUFACTURE, "[unknown]");
+				write(writer, DESC_PRODUCT, "UVC Camera");
+			} else {
+				write(writer, DESC_VENDOR_ID, desc->idVendor);
+				write(writer, DESC_PRODUCT_ID, desc->idProduct);
+				write(writer, DESC_SERIALNUMBER, desc->serialNumber ? desc->serialNumber : "[none]");
+				write(writer, DESC_MANUFACTURE, desc->manufacturer ? desc->manufacturer : "[unknown]");
+//				write(writer, DESC_PRODUCT, desc->product ? desc->product : "UVC Camera");
+				if (desc->product)
+					write(writer, DESC_PRODUCT, desc->product);
+				else {
+					sprintf(work, "UVC Camera (%x:%x)", desc->idVendor, desc->idProduct);
+					write(writer, DESC_PRODUCT, work);
+				}
+				uvc_free_device_descriptor(desc);
 			}
-			uvc_free_device_descriptor(desc);
 
 			if (deviceHandle->info->ctrl_if.bcdUVC) {
 				writer.String(DESC_UVC);

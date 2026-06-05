@@ -41,7 +41,7 @@ public class GLTexture implements ITexture {
 	/* package */final float[] mTexMatrix = new float[16];	// テクスチャ変換行列
 	/* package */int mTexWidth, mTexHeight;
 	/* package */int mImageWidth, mImageHeight;
-	
+
 	/**
 	 * コンストラクタ
 	 * テクスチャユニットが常時GL_TEXTURE0なので複数のテクスチャを同時に使えない
@@ -52,7 +52,7 @@ public class GLTexture implements ITexture {
 	public GLTexture(final int width, final int height, final int filter_param) {
 		this(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE0, width, height, filter_param);
 	}
-	
+
 	/**
 	 * コンストラクタ
 	 * @param texTarget GL_TEXTURE_EXTERNAL_OESはだめ
@@ -95,18 +95,14 @@ public class GLTexture implements ITexture {
 //		if (DEBUG) Log.v(TAG, "GLTexture:id=" + mTextureId);
 	}
 
-	@Override
-	protected void finalize() throws Throwable {
-		try {
-			release();	// GLコンテキスト内じゃない可能性があるのであまり良くないけど
-		} finally {
-			super.finalize();
-		}
-	}
-
 	/**
 	 * テクスチャを破棄
 	 * GLコンテキスト/EGLレンダリングコンテキスト内で呼び出すこと
+	 *
+	 * Note: finalize() was removed because glDeleteTextures must be called
+	 * on a thread with a valid EGL context. The GC runs finalize on its own
+	 * thread with no EGL context, causing native SIGSEGV.
+	 * Callers must explicitly call release() on the GL/EGL thread.
 	 */
 	@Override
 	public void release() {
@@ -208,7 +204,7 @@ public class GLTexture implements ITexture {
 		options.inJustDecodeBounds = false;
 		loadTexture(BitmapFactory.decodeFile(filePath, options));
 	}
-	
+
 	/**
 	 * 指定したビットマップをテクスチャに読み込む
  	 * @param bitmap
