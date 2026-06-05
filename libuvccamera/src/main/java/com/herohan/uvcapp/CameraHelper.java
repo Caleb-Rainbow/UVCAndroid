@@ -303,6 +303,12 @@ public class CameraHelper implements ICameraHelper {
                     mService.startPreview(mUsbDevice);
                 } catch (final Exception e) {
                     if (DEBUG) Log.e(TAG, "startPreview:", e);
+                    final StateCallback callback = mCallbackWrapper;
+                    final UsbDevice device = mUsbDevice;
+                    if (callback != null && device != null) {
+                        mMainHandler.post(() -> callback.onError(device,
+                            new CameraException(CameraException.CAMERA_OPEN_ERROR_UNKNOWN, e)));
+                    }
                 }
             }
         });

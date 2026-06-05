@@ -1,15 +1,12 @@
+import com.android.build.api.dsl.LibraryExtension
+
 plugins {
     alias(libs.plugins.android.library)
 }
 
-android {
+extensions.configure<LibraryExtension>("android") {
     namespace = "com.serenegiant.uvccamera"
     compileSdk = 37
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
-    }
 
     defaultConfig {
         minSdk = 21
@@ -29,9 +26,16 @@ android {
             consumerProguardFiles("consumer-rules.pro")
         }
     }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
+    }
+
     buildFeatures {
         buildConfig = true
     }
+
     externalNativeBuild {
         ndkBuild {
             path = file("src/main/jni/Android.mk")

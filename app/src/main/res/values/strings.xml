@@ -57,4 +57,11 @@
     <string name="action_more">更多</string>
     <string name="action_landscape">横屏</string>
     <string name="action_portrait">竖屏</string>
+    <string name="action_open_camera">打开摄像头</string>
+    <string name="action_close_camera">关闭摄像头</string>
+
+    <string name="multi_camera_slot_empty">摄像头 %1$d: 未连接</string>
+    <string name="multi_camera_slot_label">摄像头 %1$d</string>
+    <string name="multi_camera_max_slots_reached">USB 带宽不足，最多同时打开 2 个摄像头</string>
+    <string name="multi_camera_device_in_use">该设备已被其他摄像头使用</string>
 </resources>

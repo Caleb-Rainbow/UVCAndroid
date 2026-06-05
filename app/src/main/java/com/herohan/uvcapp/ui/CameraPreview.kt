@@ -19,6 +19,7 @@ fun CameraPreview(
     onRemoveSurface: (SurfaceTexture) -> Unit,
     previewWidth: Int,
     previewHeight: Int,
+    onFirstFrame: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val aspectRatio = if (previewHeight > 0) previewWidth.toFloat() / previewHeight.toFloat() else 1f
@@ -27,10 +28,13 @@ fun CameraPreview(
         object {
             var onAdd: ((SurfaceTexture) -> Unit)? = null
             var onRemove: ((SurfaceTexture) -> Unit)? = null
+            var onFrame: (() -> Unit)? = null
+            var firstFrameReceived = false
         }
     }
     callbacks.onAdd = onAddSurface
     callbacks.onRemove = onRemoveSurface
+    callbacks.onFrame = onFirstFrame
 
     AndroidView(
         factory = { ctx ->
@@ -52,7 +56,12 @@ fun CameraPreview(
                         return false
                     }
 
-                    override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {}
+                    override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
+                        if (!callbacks.firstFrameReceived) {
+                            callbacks.firstFrameReceived = true
+                            callbacks.onFrame?.invoke()
+                        }
+                    }
                 }
             }
         },

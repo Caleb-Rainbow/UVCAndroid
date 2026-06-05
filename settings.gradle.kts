@@ -24,7 +24,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "UVCAndroid"
+rootProject.name = "UvcAndroid"
 include(":libuvccamera")
 include(":app")
 include(":demo")

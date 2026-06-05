@@ -552,6 +552,9 @@ public class UVCCamera {
         if (mCtrlBlock != null) {
             final int result = nativeStartPreview(mNativePtr);
             if (DEBUG) Log.d(TAG, "startPreview:result=" + result);
+            if (result != 0) {
+                throw new RuntimeException("startPreview failed: result=" + result);
+            }
         }
     }
 

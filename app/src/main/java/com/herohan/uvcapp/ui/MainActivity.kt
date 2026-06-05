@@ -1,34 +1,35 @@
 package com.herohan.uvcapp.ui
 
-import android.content.Intent
-import android.content.pm.ActivityInfo
 import android.Manifest
+import android.content.pm.ActivityInfo
 import android.hardware.usb.UsbDevice
-import android.hardware.usb.UsbManager
 import android.os.Bundle
-import android.os.SystemClock
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Usb
-import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.StayCurrentLandscape
 import androidx.compose.material.icons.filled.StayCurrentPortrait
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.filled.Usb
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -39,6 +40,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -47,7 +49,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -55,12 +56,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.herohan.uvcapp.R
 import com.herohan.uvcapp.ui.theme.UVCAndroidTheme
-import com.herohan.uvcapp.utils.TimeFormatter
-import com.hjq.permissions.XXPermissions
-import com.hjq.permissions.permission.PermissionLists
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.compose.rememberLauncherForActivityResult
-import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
 
@@ -74,22 +69,11 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        if (intent.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
-            @Suppress("DEPRECATION")
-            val device = intent.getParcelableExtra<UsbDevice>(UsbManager.EXTRA_DEVICE)
-            device?.let {
-                // The ViewModel's StateCallback will handle onAttach
-            }
-        }
-    }
 }
 
 @Composable
 private fun MainScreen(
-    viewModel: MainViewModel = viewModel(),
+    viewModel: MultiCameraViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -105,7 +89,7 @@ private fun MainScreen(
         }
     }
 
-    // Request CAMERA permission on Android 16+ (required for USB video class devices)
+    // Request CAMERA permission
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -118,42 +102,33 @@ private fun MainScreen(
         }
     }
 
-    // Toast handling
-    LaunchedEffect(uiState.toastMessage) {
-        uiState.toastMessage?.let { msg ->
+    // Global toast handling
+    LaunchedEffect(uiState.globalToastMessage) {
+        uiState.globalToastMessage?.let { msg ->
             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-            viewModel.clearToast()
+            viewModel.clearGlobalToast()
         }
     }
 
-    // Recording timer
-    var recordStartTime by remember { mutableStateOf(0L) }
-    LaunchedEffect(uiState.isRecording) {
-        if (uiState.isRecording) {
-            recordStartTime = SystemClock.elapsedRealtime()
-            while (true) {
-                delay(250)
-                viewModel.updateRecordTime(SystemClock.elapsedRealtime() - recordStartTime)
+    // Per-slot toast handling — keyed by slotId for stable identity
+    uiState.slots.forEach { (slotId, slotState) ->
+        key(slotId) {
+            LaunchedEffect(slotId, slotState.toastMessage) {
+                slotState.toastMessage?.let { msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    viewModel.clearSlotToast(slotId)
+                }
             }
-        } else {
-            viewModel.updateRecordTime(0)
         }
     }
 
     Scaffold(
         topBar = {
             MainTopAppBar(
-                isCameraConnected = uiState.isCameraConnected,
                 isLandscape = isLandscape,
-                onControlsClick = { viewModel.showCameraControlsDialog() },
-                onDeviceClick = { viewModel.showDeviceListDialog() },
-                onSafelyEjectClick = { viewModel.safelyEject() },
-                onVideoFormatClick = { viewModel.showVideoFormatDialog() },
-                onRotateCWClick = { viewModel.rotateBy(90) },
-                onRotateCCWClick = { viewModel.rotateBy(-90) },
-                onFlipHorizontalClick = { viewModel.flipHorizontally() },
-                onFlipVerticalClick = { viewModel.flipVertically() },
                 onLandscapeClick = toggleLandscape,
+                onOpenDeviceClick = { viewModel.showOpenDeviceDialog() },
+                canAddSlot = uiState.slots.size < MultiCameraViewModel.MAX_SLOTS,
             )
         },
     ) { paddingValues ->
@@ -163,126 +138,134 @@ private fun MainScreen(
                 .background(Color.Black)
                 .padding(paddingValues),
         ) {
-            if (uiState.isCameraConnected) {
-                CameraPreview(
-                    onAddSurface = { surface -> viewModel.addSurface(surface, false) },
-                    onRemoveSurface = { surface -> viewModel.removeSurface(surface) },
-                    previewWidth = uiState.previewWidth,
-                    previewHeight = uiState.previewHeight,
-                    modifier = Modifier.align(Alignment.Center),
-                )
+            when {
+                uiState.slots.isEmpty() -> {
+                    // No cameras — show tip and open button
+                    Column(
+                        modifier = Modifier.align(Alignment.Center),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.main_connect_usb_tip),
+                            modifier = Modifier.padding(32.dp),
+                            style = MaterialTheme.typography.titleLarge,
+                            color = Color.White,
+                            textAlign = TextAlign.Center,
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = { viewModel.showOpenDeviceDialog() },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Usb,
+                                contentDescription = null,
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                            Text(stringResource(R.string.action_open_camera))
+                        }
+                    }
+                }
 
-                if (uiState.isRecording) {
-                    Text(
-                        text = TimeFormatter.formatRecordTimeMMSS(uiState.recordTimeMillis.toInt()),
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(top = 8.dp),
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = Color.Red,
+                uiState.slots.size == 1 -> {
+                    // Single camera — full screen
+                    val (slotId, slotState) = uiState.slots.entries.first()
+                    CameraSlotComposable(
+                        state = slotState,
+                        controller = viewModel.getSlotController(slotId) ?: return@Box,
+                        allDevices = uiState.allDevices,
+                        isMultiSlot = false,
+                        onEnqueueDevice = { id, device ->
+                            viewModel.enqueueDeviceSelection(id, device)
+                        },
+                        onRemoveSlot = { viewModel.removeSlot(slotId) },
+                        modifier = Modifier.fillMaxSize(),
                     )
                 }
 
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(16.dp),
-                ) {
-                    FloatingActionButton(
-                        onClick = {
-                            XXPermissions.with(context as MainActivity)
-                                .permission(PermissionLists.getManageExternalStoragePermission())
-                                .permission(PermissionLists.getRecordAudioPermission())
-                                .request { _, allGranted ->
-                                    if (allGranted) viewModel.toggleVideoRecord()
-                                }
-                        },
-                        containerColor = if (uiState.isRecording) Color.Red
-                        else MaterialTheme.colorScheme.primaryContainer,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Videocam,
-                            contentDescription = stringResource(R.string.action_record),
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    FloatingActionButton(
-                        onClick = {
-                            XXPermissions.with(context as MainActivity)
-                                .permission(PermissionLists.getManageExternalStoragePermission())
-                                .request { _, allGranted ->
-                                    if (allGranted) viewModel.takePicture()
-                                }
-                        },
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CameraAlt,
-                            contentDescription = stringResource(R.string.action_take_picture),
-                        )
-                    }
+                else -> {
+                    // Multiple cameras — grid layout
+                    MultiCameraGrid(
+                        slots = uiState.slots,
+                        allDevices = uiState.allDevices,
+                        viewModel = viewModel,
+                        isLandscape = isLandscape,
+                    )
                 }
-            } else {
-                Text(
-                    text = stringResource(R.string.main_connect_usb_tip),
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(32.dp),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = Color.White,
-                    textAlign = TextAlign.Center,
-                )
             }
         }
     }
 
-    // Dialogs
-    if (uiState.showDeviceListDialog) {
+    // Global device selection dialog (for opening a new camera)
+    if (uiState.showOpenDeviceDialog) {
+        val boundDeviceIds = uiState.slots.values
+            .mapNotNull { it.boundDevice?.deviceId }
+            .toSet()
+        val availableDevices = uiState.allDevices.filter { it.deviceId !in boundDeviceIds }
+
         DeviceListDialog(
-            deviceList = uiState.deviceList,
-            currentDevice = uiState.selectedDevice,
+            deviceList = availableDevices,
+            currentDevice = null,
             onDeviceSelected = { device ->
-                if (uiState.isCameraConnected) viewModel.safelyEject()
-                viewModel.selectDevice(device)
+                viewModel.dismissOpenDeviceDialog()
+                viewModel.openDevice(device)
             },
-            onDismiss = { viewModel.dismissDeviceListDialog() },
-        )
-    }
-
-    if (uiState.showCameraControlsDialog) {
-        CameraControlsDialog(
-            control = viewModel.getUvcControl(),
-            onDismiss = { viewModel.dismissCameraControlsDialog() },
-        )
-    }
-
-    if (uiState.showVideoFormatDialog) {
-        VideoFormatDialog(
-            formatList = uiState.supportedFormats,
-            currentSize = uiState.currentPreviewSize,
-            onFormatSelected = { size -> viewModel.setPreviewSize(size) },
-            onDismiss = { viewModel.dismissVideoFormatDialog() },
+            onDismiss = { viewModel.dismissOpenDeviceDialog() },
         )
     }
 }
 
 @Composable
-private fun MainTopAppBar(
-    isCameraConnected: Boolean,
+private fun MultiCameraGrid(
+    slots: Map<String, CameraSlotState>,
+    allDevices: List<UsbDevice>,
+    viewModel: MultiCameraViewModel,
     isLandscape: Boolean,
-    onControlsClick: () -> Unit,
-    onDeviceClick: () -> Unit,
-    onSafelyEjectClick: () -> Unit,
-    onVideoFormatClick: () -> Unit,
-    onRotateCWClick: () -> Unit,
-    onRotateCCWClick: () -> Unit,
-    onFlipHorizontalClick: () -> Unit,
-    onFlipVerticalClick: () -> Unit,
-    onLandscapeClick: () -> Unit,
 ) {
-    var showMenu by remember { mutableStateOf(false) }
+    val columns = if (isLandscape) {
+        if (slots.size <= 2) 2 else 3
+    } else {
+        1
+    }
 
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(columns),
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        items(
+            items = slots.entries.toList(),
+            key = { it.key },
+        ) { (slotId, slotState) ->
+            CameraSlotComposable(
+                state = slotState,
+                controller = viewModel.getSlotController(slotId) ?: return@items,
+                allDevices = allDevices,
+                isMultiSlot = true,
+                onEnqueueDevice = { id, device ->
+                    viewModel.enqueueDeviceSelection(id, device)
+                },
+                onRemoveSlot = { viewModel.removeSlot(slotId) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (isLandscape) Modifier.aspectRatio(16f / 9f)
+                        else Modifier
+                    ),
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MainTopAppBar(
+    isLandscape: Boolean,
+    onOpenDeviceClick: () -> Unit,
+    onLandscapeClick: () -> Unit,
+    canAddSlot: Boolean,
+) {
     TopAppBar(
         title = { Text(stringResource(R.string.app_name)) },
         colors = TopAppBarDefaults.topAppBarColors(
@@ -291,70 +274,23 @@ private fun MainTopAppBar(
             actionIconContentColor = MaterialTheme.colorScheme.onPrimary,
         ),
         actions = {
-            if (isCameraConnected) {
-                IconButton(onClick = onControlsClick) {
+            if (canAddSlot) {
+                IconButton(onClick = onOpenDeviceClick) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_action_control),
-                        contentDescription = stringResource(R.string.action_control),
-                    )
-                }
-                IconButton(onClick = onLandscapeClick) {
-                    Icon(
-                        imageVector = if (isLandscape) Icons.Default.StayCurrentPortrait
-                        else Icons.Default.StayCurrentLandscape,
-                        contentDescription = stringResource(
-                            if (isLandscape) R.string.action_portrait
-                            else R.string.action_landscape
-                        ),
+                        imageVector = Icons.Default.Add,
+                        contentDescription = stringResource(R.string.action_open_camera),
                     )
                 }
             }
-
-            IconButton(onClick = onDeviceClick) {
+            IconButton(onClick = onLandscapeClick) {
                 Icon(
-                    imageVector = Icons.Default.Usb,
-                    contentDescription = stringResource(R.string.action_usb),
+                    imageVector = if (isLandscape) Icons.Default.StayCurrentPortrait
+                    else Icons.Default.StayCurrentLandscape,
+                    contentDescription = stringResource(
+                        if (isLandscape) R.string.action_portrait
+                        else R.string.action_landscape
+                    ),
                 )
-            }
-
-            if (isCameraConnected) {
-                Box {
-                    IconButton(onClick = { showMenu = !showMenu }) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = stringResource(R.string.action_more),
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false },
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.action_safely_eject)) },
-                            onClick = { showMenu = false; onSafelyEjectClick() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.action_video_format)) },
-                            onClick = { showMenu = false; onVideoFormatClick() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.action_rotate_90_CW)) },
-                            onClick = { showMenu = false; onRotateCWClick() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.action_rotate_90_CCW)) },
-                            onClick = { showMenu = false; onRotateCCWClick() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.action_flip_horizontally)) },
-                            onClick = { showMenu = false; onFlipHorizontalClick() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.action_flip_vertically)) },
-                            onClick = { showMenu = false; onFlipVerticalClick() },
-                        )
-                    }
-                }
             }
         },
     )
