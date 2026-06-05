@@ -6,15 +6,19 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -25,12 +29,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import com.herohan.uvcapp.R
 import com.serenegiant.usb.Format
 import com.serenegiant.usb.Size
 import com.serenegiant.usb.UVCCamera
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VideoFormatDialog(
     formatList: List<Format>,
@@ -55,95 +59,97 @@ fun VideoFormatDialog(
         initData.getFpsList(selectedType, selectedResolution)
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        androidx.compose.material3.Card(
-            modifier = Modifier.fillMaxWidth(),
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .navigationBarsPadding(),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
+            Text(
+                text = stringResource(R.string.video_format_title),
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Format dropdown
+            FormatDropdown(
+                label = stringResource(R.string.video_format_format),
+                options = typeNames,
+                selectedIndex = typeKeys.indexOf(selectedType).coerceAtLeast(0),
+                onSelected = { index ->
+                    val newType = typeKeys[index]
+                    if (newType != selectedType) {
+                        selectedType = newType
+                        val newResolutions = initData.getResolutions(newType)
+                        selectedResolution = newResolutions.firstOrNull() ?: ""
+                        val newFpsList = initData.getFpsList(newType, selectedResolution)
+                        selectedFps = newFpsList.firstOrNull() ?: 0
+                    }
+                },
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Resolution dropdown
+            FormatDropdown(
+                label = stringResource(R.string.video_format_resolution),
+                options = resolutions,
+                selectedIndex = resolutions.indexOf(selectedResolution).coerceAtLeast(0),
+                onSelected = { index ->
+                    val newResolution = resolutions[index]
+                    if (newResolution != selectedResolution) {
+                        selectedResolution = newResolution
+                        val newFpsList = initData.getFpsList(selectedType, newResolution)
+                        selectedFps = newFpsList.firstOrNull() ?: 0
+                    }
+                },
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Frame rate dropdown
+            FormatDropdown(
+                label = stringResource(R.string.video_format_frame_rate),
+                options = fpsList.map { it.toString() },
+                selectedIndex = fpsList.indexOf(selectedFps).coerceAtLeast(0),
+                onSelected = { index ->
+                    selectedFps = fpsList[index]
+                },
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
             ) {
-                Text(
-                    text = stringResource(R.string.video_format_title),
-                    style = MaterialTheme.typography.titleLarge,
-                )
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Format dropdown
-                FormatDropdown(
-                    label = stringResource(R.string.video_format_format),
-                    options = typeNames,
-                    selectedIndex = typeKeys.indexOf(selectedType).coerceAtLeast(0),
-                    onSelected = { index ->
-                        val newType = typeKeys[index]
-                        if (newType != selectedType) {
-                            selectedType = newType
-                            val newResolutions = initData.getResolutions(newType)
-                            selectedResolution = newResolutions.firstOrNull() ?: ""
-                            val newFpsList = initData.getFpsList(newType, selectedResolution)
-                            selectedFps = newFpsList.firstOrNull() ?: 0
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.video_format_cancel_button))
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                TextButton(
+                    onClick = {
+                        val parts = selectedResolution.split("x")
+                        if (parts.size == 2) {
+                            val size = Size(
+                                selectedType,
+                                parts[0].toIntOrNull() ?: 640,
+                                parts[1].toIntOrNull() ?: 480,
+                                selectedFps,
+                                ArrayList(fpsList),
+                            )
+                            onFormatSelected(size)
                         }
+                        onDismiss()
                     },
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Resolution dropdown
-                FormatDropdown(
-                    label = stringResource(R.string.video_format_resolution),
-                    options = resolutions,
-                    selectedIndex = resolutions.indexOf(selectedResolution).coerceAtLeast(0),
-                    onSelected = { index ->
-                        val newResolution = resolutions[index]
-                        if (newResolution != selectedResolution) {
-                            selectedResolution = newResolution
-                            val newFpsList = initData.getFpsList(selectedType, newResolution)
-                            selectedFps = newFpsList.firstOrNull() ?: 0
-                        }
-                    },
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Frame rate dropdown
-                FormatDropdown(
-                    label = stringResource(R.string.video_format_frame_rate),
-                    options = fpsList.map { it.toString() },
-                    selectedIndex = fpsList.indexOf(selectedFps).coerceAtLeast(0),
-                    onSelected = { index ->
-                        selectedFps = fpsList[index]
-                    },
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Buttons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
                 ) {
-                    TextButton(onClick = onDismiss) {
-                        Text(stringResource(R.string.video_format_cancel_button))
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    TextButton(
-                        onClick = {
-                            val parts = selectedResolution.split("x")
-                            if (parts.size == 2) {
-                                val size = Size(
-                                    selectedType,
-                                    parts[0].toIntOrNull() ?: 640,
-                                    parts[1].toIntOrNull() ?: 480,
-                                    selectedFps,
-                                    ArrayList(fpsList),
-                                )
-                                onFormatSelected(size)
-                            }
-                            onDismiss()
-                        },
-                    ) {
-                        Text(stringResource(R.string.video_format_ok_button))
-                    }
+                    Text(stringResource(R.string.video_format_ok_button))
                 }
             }
         }
