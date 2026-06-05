@@ -5,7 +5,9 @@ import android.hardware.usb.UsbDevice
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.herohan.uvcapp.CameraHelper
+import com.herohan.uvcapp.R
 import com.herohan.uvcapp.ICameraHelper
+import com.herohan.uvcapp.utils.identityKey
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,15 +32,20 @@ class MultiCameraViewModel(application: Application) : AndroidViewModel(applicat
 
     companion object {
         const val MAX_SLOTS = 4
-
-        /** Composite key for stable USB device identity across hot-plug events. */
-        fun UsbDevice.identityKey(): String =
-            "${vendorId}_${productId}_${deviceName}"
     }
 
     private val _uiState = MutableStateFlow(MultiCameraUiState())
     val uiState: StateFlow<MultiCameraUiState> = _uiState.asStateFlow()
 
+    /**
+     * Active camera slots. LinkedHashMap preserves insertion order for grid display.
+     *
+     * Threading: all access occurs on the main thread. USB callbacks are marshalled to
+     * the main thread by [CameraHelper.StateCallbackWrapper]. Coroutines use
+     * [viewModelScope] which defaults to [kotlinx.coroutines.Dispatchers.Main].
+     * The [_deviceMutex] provides logical serialization for device operations,
+     * not thread safety.
+     */
     private val _slots = LinkedHashMap<String, CameraSlotController>()
     private val _deviceMutex = Mutex()
     private var _nextSlotIndex = 0
@@ -69,7 +76,7 @@ class MultiCameraViewModel(application: Application) : AndroidViewModel(applicat
                 refreshAllDevices()
                 // Remove the slot that was bound to this device
                 val slotToRemove = _slots.entries.find {
-                    it.value.state.value.boundDevice?.identityKey() == device.identityKey()
+                    it.value.state.value.boundDeviceKey == device.identityKey()
                 }
                 slotToRemove?.let { (key, controller) ->
                     controller.release()
@@ -95,7 +102,7 @@ class MultiCameraViewModel(application: Application) : AndroidViewModel(applicat
         }
         controller.onRemoveRequested = {
             _uiState.update {
-                it.copy(globalToastMessage = "摄像头打开失败: USB 带宽不足")
+                it.copy(globalToastMessage = getApplication<Application>().getString(R.string.slot_camera_open_failed))
             }
             controller.release()
             _slots.remove(slotId)
@@ -120,19 +127,19 @@ class MultiCameraViewModel(application: Application) : AndroidViewModel(applicat
     /** User explicitly opens a device — creates a new slot for it. */
     fun openDevice(device: UsbDevice) {
         if (!_uiState.value.hasCameraPermission) {
-            _uiState.update { it.copy(globalToastMessage = "使用 USB 摄像头需要相机权限") }
+            _uiState.update { it.copy(globalToastMessage = getApplication<Application>().getString(R.string.global_camera_permission_required)) }
             return
         }
 
         if (_slots.size >= MAX_SLOTS) {
-            _uiState.update { it.copy(globalToastMessage = "已达最大摄像头数量") }
+            _uiState.update { it.copy(globalToastMessage = getApplication<Application>().getString(R.string.global_max_cameras_reached)) }
             return
         }
         val existingSlot = _slots.values.find {
-            it.state.value.boundDevice?.identityKey() == device.identityKey()
+            it.state.value.boundDeviceKey == device.identityKey()
         }
         if (existingSlot != null) {
-            _uiState.update { it.copy(globalToastMessage = "该设备已被其他摄像头使用") }
+            _uiState.update { it.copy(globalToastMessage = getApplication<Application>().getString(R.string.global_device_in_use)) }
             return
         }
         createSlotForDevice(device)
@@ -159,52 +166,59 @@ class MultiCameraViewModel(application: Application) : AndroidViewModel(applicat
     fun enqueueDeviceSelection(slotId: String, device: UsbDevice) {
         if (!_uiState.value.hasCameraPermission) {
             _uiState.update {
-                it.copy(globalToastMessage = "使用 USB 摄像头需要相机权限")
+                it.copy(globalToastMessage = getApplication<Application>().getString(R.string.global_camera_permission_required))
             }
             return
         }
 
         viewModelScope.launch {
-            _deviceMutex.withLock {
-                // Re-validate: check slot still exists
-                val controller = _slots[slotId] ?: return@launch
+            // Phase A: Validate and eject under lock
+            val controller = _deviceMutex.withLock {
+                val ctrl = _slots[slotId] ?: return@launch
 
-                // Re-validate: check device is not bound to another slot
+                // Check device is not bound to another slot
                 val conflictSlot = _slots.entries.find { entry ->
                     entry.key != slotId &&
-                        entry.value.state.value.boundDevice?.identityKey() == device.identityKey()
+                        entry.value.state.value.boundDeviceKey == device.identityKey()
                 }
                 if (conflictSlot != null) {
                     _uiState.update {
-                        it.copy(globalToastMessage = "该设备已被其他摄像头使用")
+                        it.copy(globalToastMessage = getApplication<Application>().getString(R.string.global_device_in_use))
                     }
                     return@launch
                 }
 
                 // Eject current camera if connected
-                if (controller.state.value.isCameraConnected) {
-                    controller.safelyEject()
-                    // Reactively wait for camera to disconnect (max 5 seconds)
-                    val disconnected = withTimeoutOrNull(5000L) {
-                        controller.state
-                            .map { it.isCameraConnected }
-                            .first { !it }
-                    }
-                    if (disconnected == null) {
-                        // Camera did not disconnect in time — proceed anyway
-                    }
-                    // Small delay for USB cleanup
-                    kotlinx.coroutines.delay(300)
+                if (ctrl.state.value.isCameraConnected) {
+                    ctrl.safelyEject()
                 }
+                ctrl
+            }
+            // Lock released — other slot operations can proceed during the wait
 
+            // Phase B: Wait for disconnect (unlocked)
+            if (controller.state.value.isCameraConnected) {
+                withTimeoutOrNull(5000L) {
+                    controller.state
+                        .map { it.isCameraConnected }
+                        .first { !it }
+                }
+                kotlinx.coroutines.delay(300)
+            }
+
+            // Phase C: Revalidate and select under lock
+            _deviceMutex.withLock {
                 // Re-validate after wait: slot may have been removed by onDetach
                 if (!_slots.containsKey(slotId)) return@launch
 
                 controller.selectDevice(device)
+            }
 
-                // Wait for the camera to open or fail
-                kotlinx.coroutines.delay(500)
+            // Wait for the camera to open or fail (outside lock)
+            kotlinx.coroutines.delay(500)
 
+            // Final check: slot may have been removed during the delay
+            if (_slots.containsKey(slotId)) {
                 refreshAllDevices()
             }
         }
@@ -238,8 +252,10 @@ class MultiCameraViewModel(application: Application) : AndroidViewModel(applicat
     fun getSlotController(slotId: String): CameraSlotController? = _slots[slotId]
 
     private fun syncSlotStates() {
-        val slotStates = _slots.mapValues { it.value.state.value }
-        _uiState.update { it.copy(slots = slotStates) }
+        val newSlots = _slots.mapValues { it.value.state.value }
+        _uiState.update { current ->
+            if (current.slots == newSlots) current else current.copy(slots = newSlots)
+        }
     }
 
     override fun onCleared() {

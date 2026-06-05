@@ -16,6 +16,8 @@ import com.serenegiant.usb.UVCControl
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import com.herohan.uvcapp.R
+import com.herohan.uvcapp.utils.identityKey
 import java.io.File
 import java.io.IOException
 
@@ -34,6 +36,10 @@ class CameraSlotController(
 
     private val _state = MutableStateFlow(CameraSlotState(slotId = slotId, slotIndex = slotIndex))
     val state = _state.asStateFlow()
+
+    /** Dedicated flow for recording time — bypasses syncSlotStates to avoid cascade recomposition. */
+    private val _recordTimeMillis = MutableStateFlow(0L)
+    val recordTimeMillis = _recordTimeMillis.asStateFlow()
 
     private var _cameraHelper: ICameraHelper? = null
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -82,7 +88,11 @@ class CameraSlotController(
                 _cameraHelper?.openCamera()
                 _cameraHelper?.setButtonCallback { button, btnState ->
                     if (isReleased) return@setButtonCallback
-                    _state.update { it.copy(toastMessage = "按钮: $button, 状态: $btnState") }
+                    _state.update {
+                                it.copy(toastMessage = appContext.getString(
+                                    R.string.slot_button_event, button, btnState
+                                ))
+                            }
                     notifyStateChanged()
                 }
             }
@@ -92,14 +102,14 @@ class CameraSlotController(
                 _cameraHelper?.startPreview()
                 // Start timeout to detect silent preview failure (USB bandwidth exhaustion)
                 _previewStarted = false
-                _previewCheckRunnable = Runnable {
+                val checkRunnable = Runnable {
                     if (isReleased) return@Runnable
                     if (!_previewStarted && _state.value.isCameraConnected) {
                         _cameraHelper?.closeCamera()
                         _state.update {
                             it.copy(
                                 isCameraConnected = false,
-                                boundDevice = null,
+                                boundDeviceKey = null,
                             )
                         }
                         notifyStateChanged()
@@ -111,7 +121,8 @@ class CameraSlotController(
                         }, 100)
                     }
                 }
-                mainHandler.postDelayed(_previewCheckRunnable!!, PREVIEW_CHECK_TIMEOUT_MS)
+                _previewCheckRunnable = checkRunnable
+                mainHandler.postDelayed(checkRunnable, PREVIEW_CHECK_TIMEOUT_MS)
 
                 val size = _cameraHelper?.previewSize
                 if (size != null) {
@@ -127,7 +138,7 @@ class CameraSlotController(
                     it.copy(
                         isCameraConnected = true,
                         supportedFormats = _cameraHelper?.supportedFormatList ?: emptyList(),
-                        boundDevice = device,
+                        boundDeviceKey = device.identityKey(),
                     )
                 }
                 notifyStateChanged()
@@ -144,7 +155,7 @@ class CameraSlotController(
                         showCameraControlsDialog = false,
                         showDeviceListDialog = false,
                         showVideoFormatDialog = false,
-                        boundDevice = null,
+                        boundDeviceKey = null,
                     )
                 }
                 notifyStateChanged()
@@ -154,15 +165,15 @@ class CameraSlotController(
 
             override fun onDetach(device: UsbDevice) {
                 if (isReleased) return
-                if (device == _state.value.boundDevice) {
-                    _state.update { it.copy(boundDevice = null) }
+                if (device.identityKey() == _state.value.boundDeviceKey) {
+                    _state.update { it.copy(boundDeviceKey = null) }
                     notifyStateChanged()
                 }
             }
 
             override fun onCancel(device: UsbDevice) {
                 if (isReleased) return
-                _state.update { it.copy(boundDevice = null) }
+                _state.update { it.copy(boundDeviceKey = null) }
                 notifyStateChanged()
             }
 
@@ -171,8 +182,8 @@ class CameraSlotController(
                 _state.update {
                     it.copy(
                         isCameraConnected = false,
-                        toastMessage = "摄像头打开失败: USB 带宽不足",
-                        boundDevice = null,
+                        toastMessage = appContext.getString(R.string.slot_camera_open_failed),
+                        boundDeviceKey = null,
                     )
                 }
                 notifyStateChanged()
@@ -181,7 +192,7 @@ class CameraSlotController(
     }
 
     fun selectDevice(device: UsbDevice) {
-        _state.update { it.copy(isCameraConnected = false, boundDevice = device) }
+        _state.update { it.copy(isCameraConnected = false, boundDeviceKey = device.identityKey()) }
         _cameraHelper?.selectDevice(device)
     }
 
@@ -207,7 +218,10 @@ class CameraSlotController(
                     if (isReleased) return
                     _state.update {
                         it.copy(
-                            toastMessage = "已保存: ${outputFileResults.savedUri?.path ?: file.absolutePath}"
+                            toastMessage = appContext.getString(
+                                    R.string.slot_photo_saved,
+                                    outputFileResults.savedUri?.path ?: file.absolutePath
+                                )
                         )
                     }
                     notifyStateChanged()
@@ -215,15 +229,21 @@ class CameraSlotController(
 
                 override fun onError(imageCaptureError: Int, message: String, cause: Throwable?) {
                     if (isReleased) return
-                    _state.update { it.copy(toastMessage = "拍照失败") }
+                    _state.update {
+                                it.copy(toastMessage = appContext.getString(R.string.slot_photo_capture_failed))
+                            }
                     notifyStateChanged()
                 }
             })
         } catch (e: IOException) {
-            _state.update { it.copy(toastMessage = "保存失败，请检查存储空间") }
+            _state.update {
+                it.copy(toastMessage = appContext.getString(R.string.slot_save_failed))
+            }
             notifyStateChanged()
         } catch (e: SecurityException) {
-            _state.update { it.copy(toastMessage = "权限被拒绝") }
+            _state.update {
+                it.copy(toastMessage = appContext.getString(R.string.slot_permission_denied))
+            }
             notifyStateChanged()
         }
     }
@@ -240,11 +260,15 @@ class CameraSlotController(
             }
         } catch (e: IOException) {
             stopRecordInternal()
-            _state.update { it.copy(toastMessage = "录像失败，请检查存储空间") }
+            _state.update {
+                it.copy(toastMessage = appContext.getString(R.string.slot_record_failed))
+            }
             notifyStateChanged()
         } catch (e: SecurityException) {
             stopRecordInternal()
-            _state.update { it.copy(toastMessage = "权限被拒绝") }
+            _state.update {
+                it.copy(toastMessage = appContext.getString(R.string.slot_permission_denied))
+            }
             notifyStateChanged()
         }
     }
@@ -253,7 +277,8 @@ class CameraSlotController(
         if (_cameraHelper?.isRecording == true) {
             _cameraHelper?.stopRecording()
         }
-        _state.update { it.copy(isRecording = false, recordTimeMillis = 0) }
+        _recordTimeMillis.value = 0L
+        _state.update { it.copy(isRecording = false) }
         notifyStateChanged()
     }
 
@@ -269,10 +294,14 @@ class CameraSlotController(
 
             override fun onVideoSaved(outputFileResults: VideoCapture.OutputFileResults) {
                 if (isReleased) return
-                _state.update { it.copy(isRecording = false, recordTimeMillis = 0) }
+                _recordTimeMillis.value = 0L
+                _state.update { it.copy(isRecording = false) }
                 _state.update {
                     it.copy(
-                        toastMessage = "已保存: ${outputFileResults.savedUri?.path ?: file.absolutePath}"
+                        toastMessage = appContext.getString(
+                            R.string.slot_record_saved,
+                            outputFileResults.savedUri?.path ?: file.absolutePath
+                        )
                     )
                 }
                 notifyStateChanged()
@@ -280,16 +309,18 @@ class CameraSlotController(
 
             override fun onError(videoCaptureError: Int, message: String, cause: Throwable?) {
                 if (isReleased) return
-                _state.update { it.copy(isRecording = false, recordTimeMillis = 0) }
-                _state.update { it.copy(toastMessage = "录像失败") }
+                _recordTimeMillis.value = 0L
+                _state.update { it.copy(isRecording = false) }
+                _state.update {
+                    it.copy(toastMessage = appContext.getString(R.string.slot_record_error))
+                }
                 notifyStateChanged()
             }
         })
     }
 
     fun updateRecordTime(millis: Long) {
-        _state.update { it.copy(recordTimeMillis = millis) }
-        notifyStateChanged()
+        _recordTimeMillis.value = millis
     }
 
     fun setPreviewSize(size: Size) {
@@ -309,9 +340,7 @@ class CameraSlotController(
     }
 
     fun rotateBy(angle: Int) {
-        var rotation = _state.value.previewRotation + angle
-        rotation %= 360
-        if (rotation < 0) rotation += 360
+        val rotation = ((_state.value.previewRotation + angle) % 360 + 360) % 360
         _state.update { it.copy(previewRotation = rotation) }
         val config = _cameraHelper?.previewConfig?.setRotation(rotation) ?: return
         _cameraHelper?.previewConfig = config
@@ -323,7 +352,9 @@ class CameraSlotController(
         if (config != null) {
             _cameraHelper?.previewConfig = config
         } else if (!isReleased) {
-            _state.update { it.copy(toastMessage = "无法翻转: 摄像头未就绪") }
+            _state.update {
+                it.copy(toastMessage = appContext.getString(R.string.slot_flip_not_ready))
+            }
             notifyStateChanged()
         }
     }
@@ -333,7 +364,9 @@ class CameraSlotController(
         if (config != null) {
             _cameraHelper?.previewConfig = config
         } else if (!isReleased) {
-            _state.update { it.copy(toastMessage = "无法翻转: 摄像头未就绪") }
+            _state.update {
+                it.copy(toastMessage = appContext.getString(R.string.slot_flip_not_ready))
+            }
             notifyStateChanged()
         }
     }
@@ -386,6 +419,7 @@ class CameraSlotController(
     fun release() {
         if (isReleased) return
         isReleased = true
+        _recordTimeMillis.value = 0L
         onStateChanged = null
         onRemoveRequested = null
         _previewCheckRunnable?.let { mainHandler.removeCallbacks(it) }

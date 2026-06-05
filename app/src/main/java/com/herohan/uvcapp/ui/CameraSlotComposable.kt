@@ -38,11 +38,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.herohan.uvcapp.R
+import com.herohan.uvcapp.utils.identityKey
 import com.herohan.uvcapp.utils.TimeFormatter
 import android.widget.Toast
 import com.hjq.permissions.XXPermissions
 import com.hjq.permissions.permission.PermissionLists
 import kotlinx.coroutines.delay
+import androidx.compose.runtime.collectAsState
 
 @Composable
 fun CameraSlotComposable(
@@ -55,6 +57,9 @@ fun CameraSlotComposable(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+
+    // Read recording time from dedicated flow — bypasses syncSlotStates for performance
+    val recordTime by controller.recordTimeMillis.collectAsState()
 
     // Stable lambda references to avoid unnecessary recompositions
     val onAddSurface = remember(controller) {
@@ -96,7 +101,7 @@ fun CameraSlotComposable(
             // Recording timer
             if (state.isRecording) {
                 Text(
-                    text = TimeFormatter.formatRecordTimeMMSS(state.recordTimeMillis.toInt()),
+                    text = TimeFormatter.formatRecordTimeMMSS(recordTime.toInt()),
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .padding(top = 8.dp),
@@ -154,7 +159,7 @@ fun CameraSlotComposable(
                                 if (allGranted) {
                                     controller.toggleVideoRecord()
                                 } else {
-                                    Toast.makeText(activity, "需要录音权限才能录制视频", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(activity, activity.getString(R.string.slot_audio_permission_required), Toast.LENGTH_SHORT).show()
                                 }
                             }
                     },
@@ -206,7 +211,7 @@ fun CameraSlotComposable(
     if (state.showDeviceListDialog) {
         DeviceListDialog(
             deviceList = allDevices,
-            currentDevice = state.boundDevice,
+            currentDevice = allDevices.find { it.identityKey() == state.boundDeviceKey },
             onDeviceSelected = onEnqueue,
             onDismiss = remember(controller) { { controller.dismissDeviceListDialog() } },
         )

@@ -64,4 +64,22 @@
     <string name="multi_camera_slot_label">摄像头 %1$d</string>
     <string name="multi_camera_max_slots_reached">USB 带宽不足，最多同时打开 2 个摄像头</string>
     <string name="multi_camera_device_in_use">该设备已被其他摄像头使用</string>
+
+    <!-- Slot-level toast messages -->
+    <string name="slot_button_event">按钮: %1$d, 状态: %2$d</string>
+    <string name="slot_camera_open_failed">摄像头打开失败: USB 带宽不足</string>
+    <string name="slot_photo_saved">已保存: %s</string>
+    <string name="slot_photo_capture_failed">拍照失败</string>
+    <string name="slot_save_failed">保存失败，请检查存储空间</string>
+    <string name="slot_permission_denied">权限被拒绝</string>
+    <string name="slot_record_failed">录像失败，请检查存储空间</string>
+    <string name="slot_record_saved">已保存: %s</string>
+    <string name="slot_record_error">录像失败</string>
+    <string name="slot_flip_not_ready">无法翻转: 摄像头未就绪</string>
+    <string name="slot_audio_permission_required">需要录音权限才能录制视频</string>
+
+    <!-- Global toast messages -->
+    <string name="global_camera_permission_required">使用 USB 摄像头需要相机权限</string>
+    <string name="global_max_cameras_reached">已达最大摄像头数量</string>
+    <string name="global_device_in_use">该设备已被其他摄像头使用</string>
 </resources>

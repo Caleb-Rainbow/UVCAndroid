@@ -56,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.herohan.uvcapp.R
 import com.herohan.uvcapp.ui.theme.UVCAndroidTheme
+import com.herohan.uvcapp.utils.identityKey
 
 class MainActivity : ComponentActivity() {
 
@@ -201,10 +202,10 @@ private fun MainScreen(
 
     // Global device selection dialog (for opening a new camera)
     if (uiState.showOpenDeviceDialog) {
-        val boundDeviceIds = uiState.slots.values
-            .mapNotNull { it.boundDevice?.deviceId }
+        val boundDeviceKeys = uiState.slots.values
+            .mapNotNull { it.boundDeviceKey }
             .toSet()
-        val availableDevices = uiState.allDevices.filter { it.deviceId !in boundDeviceIds }
+        val availableDevices = uiState.allDevices.filter { it.identityKey() !in boundDeviceKeys }
 
         DeviceListDialog(
             deviceList = availableDevices,

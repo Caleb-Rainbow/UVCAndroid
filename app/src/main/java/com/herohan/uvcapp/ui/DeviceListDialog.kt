@@ -30,6 +30,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.herohan.uvcapp.R
+import com.herohan.uvcapp.utils.identityKey
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,7 +40,7 @@ fun DeviceListDialog(
     onDeviceSelected: (UsbDevice) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var selectedDevice by remember { mutableStateOf(currentDevice) }
+    var selectedDeviceKey by remember { mutableStateOf(currentDevice?.identityKey()) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -71,8 +72,8 @@ fun DeviceListDialog(
                     items(deviceList, key = { it.deviceId }) { device ->
                         DeviceItem(
                             device = device,
-                            isSelected = device == selectedDevice,
-                            onClick = { selectedDevice = device },
+                            isSelected = device.identityKey() == selectedDeviceKey,
+                            onClick = { selectedDeviceKey = device.identityKey() },
                         )
                     }
                 }
@@ -88,6 +89,7 @@ fun DeviceListDialog(
                     Text(stringResource(R.string.device_list_cancel_button))
                 }
                 Spacer(modifier = Modifier.width(8.dp))
+                val selectedDevice = deviceList.find { it.identityKey() == selectedDeviceKey }
                 TextButton(
                     onClick = {
                         selectedDevice?.let { onDeviceSelected(it) }
