@@ -668,6 +668,15 @@ uvc_error_t uvc_get_stream_ctrl_format_size(
                 ctrl->bInterfaceNumber = stream_if->bInterfaceNumber;
                 UVC_DEBUG("claiming streaming interface %d", stream_if->bInterfaceNumber);
                 uvc_claim_if(devh, ctrl->bInterfaceNumber);
+
+                /* UVC spec (1.5 §4.3.1) step 1: SET_INTERFACE(0) must be
+                 * done BEFORE any PROBE/COMMIT negotiation.  Some cameras
+                 * enter a bad state if PROBE is sent while the streaming
+                 * interface is at a non-zero altsetting — the sensor
+                 * may start but send all-zero frames. */
+                libusb_set_interface_alt_setting(devh->usb_devh,
+                                                 ctrl->bInterfaceNumber, 0);
+
                 /* get the max values */
                 uvc_query_stream_ctrl(devh, ctrl, 1, UVC_GET_MAX);
 
@@ -1388,16 +1397,14 @@ uvc_error_t uvc_stream_start(
             goto fail;
         }
 
-        /* Select the altsetting */
-        /* On some Android USB stacks, the altsetting must be reset to 0 first
-         * before setting the target altsetting. This ensures the USB host
-         * controller properly releases any previous bandwidth allocation. */
-        ret = libusb_set_interface_alt_setting(strmh->devh->usb_devh,
-                                               altsetting->bInterfaceNumber, 0);
-        if (ret != UVC_SUCCESS) {
-            /* Don't fail here - some devices are already at altsetting 0 */
-        }
-
+        /* Select the altsetting.
+         * The interface is already at altsetting 0 from the
+         * SET_INTERFACE(0) done before PROBE in
+         * uvc_get_stream_ctrl_format_size() per UVC spec §4.3.1.
+         * Skip the redundant SET_INTERFACE(0) — after COMMIT the
+         * sensor is initializing, and an extra USB control transfer
+         * at this point can disrupt it on some cameras, causing
+         * them to send all-zero frames. */
         ret = libusb_set_interface_alt_setting(strmh->devh->usb_devh,
                                                altsetting->bInterfaceNumber,
                                                altsetting->bAlternateSetting);

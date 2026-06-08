@@ -14,12 +14,9 @@ import com.serenegiant.opengl.renderer.MirrorMode
 import com.serenegiant.usb.Size
 import com.serenegiant.usb.UVCControl
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 import com.herohan.uvcapp.R
 import com.herohan.uvcapp.utils.identityKey
 import java.io.File
@@ -37,8 +34,6 @@ class CameraSlotController(
         private const val TAG = "CameraSlotController"
         /** ~6.25 Mbps */
         private const val VIDEO_BITRATE_BPS = (1024 * 1024 * 25 / 4)
-        /** Timeout to detect silent preview failure */
-        private const val PREVIEW_CHECK_TIMEOUT_MS = 3000L
     }
 
     private val _state = MutableStateFlow(CameraSlotState(slotId = slotId, slotIndex = slotIndex))
@@ -49,8 +44,6 @@ class CameraSlotController(
     val recordTimeMillis = _recordTimeMillis.asStateFlow()
 
     private var _cameraHelper: ICameraHelper? = null
-    private var _previewStarted = false
-    private var previewCheckJob: Job? = null
     @Volatile private var isReleased = false
 
     /** Called on the main thread whenever this slot's state changes. */
@@ -107,27 +100,12 @@ class CameraSlotController(
             override fun onCameraOpen(device: UsbDevice) {
                 if (isReleased) return
                 _cameraHelper?.startPreview()
-                // Start timeout to detect silent preview failure (USB bandwidth exhaustion)
-                _previewStarted = false
-                previewCheckJob = scope.launch {
-                    delay(PREVIEW_CHECK_TIMEOUT_MS)
-                    if (!_previewStarted && _state.value.isCameraConnected) {
-                        _cameraHelper?.closeCamera()
-                        _state.update {
-                            it.copy(
-                                isCameraConnected = false,
-                                boundDeviceKey = null,
-                            )
-                        }
-                        notifyStateChanged()
-                        // Delay removal so toast can be shown
-                        delay(100)
-                        if (!isReleased) {
-                            val removeCallback = onRemoveRequested
-                            removeCallback?.invoke()
-                        }
-                    }
-                }
+                // Native startPreview succeeded (result=0) means USB streaming
+                // is active.  Confirm immediately so the 3-second timeout
+                // does not fire a false-positive on slow devices where the
+                // EGL→TextureView pipeline has not yet delivered the first
+                // rendered frame.
+                confirmPreviewStarted()
 
                 val size = _cameraHelper?.previewSize
                 if (size != null) {
@@ -420,19 +398,14 @@ class CameraSlotController(
         notifyStateChanged()
     }
 
-    /** Called when the first preview frame is rendered — confirms preview is working. */
     fun confirmPreviewStarted() {
-        _previewStarted = true
-        previewCheckJob?.cancel()
-        previewCheckJob = null
+        Log.i(TAG, "confirmPreviewStarted")
     }
 
     fun release() {
         if (isReleased) return
         isReleased = true
         _recordTimeMillis.value = 0L
-        previewCheckJob?.cancel()
-        previewCheckJob = null
         onStateChanged = null
         onRemoveRequested = null
         _cameraHelper?.release()
