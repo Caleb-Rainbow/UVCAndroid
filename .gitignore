@@ -11,7 +11,8 @@
 
 # Mobile Tools for Java (J2ME)
 .mtj.tmp/
-
+/app/release/
+key
 
 # generated files
 bin/
