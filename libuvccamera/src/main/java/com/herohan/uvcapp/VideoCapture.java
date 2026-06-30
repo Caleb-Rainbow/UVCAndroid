@@ -476,16 +476,19 @@ public class VideoCapture {
     public void release() {
         stopRecording();
 
-        if (mRecordingFuture != null) {
+        // mRecordingFuture runs once at the end of the video encoding task
+        // (line ~448: mExecutor.execute(mRecordingFuture)). Only when it has
+        // NOT yet run will it get a chance to observe mRecordingWaitRelease
+        // and call releaseResources() itself. If it is null (never recorded)
+        // or already done (recording already wrapped up via stopRecording),
+        // nothing will re-run it — so release resources synchronously here.
+        // Keyed on isDone() to avoid the race where release() races the
+        // encoding thread: either we own the cleanup or the future does, never
+        // both and never neither.
+        if (mRecordingFuture != null && !mRecordingFuture.isDone()) {
             mRecordingWaitRelease.set(true);
         } else {
             releaseResources();
-        }
-
-        // Shutdown the executor and wait for pending tasks to complete
-        if (mExecutor != null) {
-            mExecutor.shutdown();
-            mExecutor = null;
         }
     }
 
@@ -513,6 +516,18 @@ public class VideoCapture {
 
         if (mCameraSurface != null) {
             releaseCameraSurface(true);
+        }
+
+        // Shutdown the executor as the final step. By now the video/audio
+        // handler threads (which end their task with
+        // mExecutor.execute(mRecordingFuture)) have finished, so there will be
+        // no more tasks submitted and it is safe to null the reference.
+        // shutdown() is non-blocking: this method may itself be running on the
+        // executor thread (called from inside mRecordingFuture.call()), where
+        // awaitTermination() would self-deadlock — shutdown() alone is correct.
+        if (mExecutor != null) {
+            mExecutor.shutdown();
+            mExecutor = null;
         }
     }
 
